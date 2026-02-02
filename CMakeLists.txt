@@ -1,15 +1,28 @@
-cmake_minimum_required(VERSION 4.1)
-project(pyng)
+cmake_minimum_required(VERSION 3.22)
+project(pyng LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
-
-include_directories(.)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(pyng
         engine.cpp
         engine.hpp
         main.cpp
         montecarlo.cpp
-        montecarlo.hpp)
+        montecarlo.hpp
+)
 
-target_link_libraries(pyng ngspice)
+find_path(NGSPICE_INCLUDE_DIR
+        NAMES ngspice/sharedspice.h
+)
+
+find_library(NGSPICE_LIBRARY
+        NAMES ngspice libngspice
+)
+
+if(NOT NGSPICE_INCLUDE_DIR OR NOT NGSPICE_LIBRARY)
+    message(FATAL_ERROR "Could not find ngspice (sharedspice.h / libngspice). Set NGSPICE_INCLUDE_DIR and NGSPICE_LIBRARY.")
+endif()
+
+target_include_directories(pyng PRIVATE ${NGSPICE_INCLUDE_DIR})
+target_link_libraries(pyng PRIVATE ${NGSPICE_LIBRARY})

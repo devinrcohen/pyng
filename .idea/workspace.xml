@@ -27,22 +27,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3b89a366-b28c-43fa-9262-58b811203813" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/montecarlo.cpp" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/montecarlo.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/editor.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/editor.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/iOSpice.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ContentView.swift" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/NgspiceScripts.swift" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/engine.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/engine.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/engine.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/engine.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/iOSpice-Bridging-Header.h" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/iOSpiceApp.swift" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/main.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/main.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sharedspice.h" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -80,6 +68,7 @@
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.RadMigrateCodeStyle&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
@@ -89,6 +78,11 @@
     &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;last_opened_file_path&quot;: &quot;/home/devinrcohen/CLionProjects/pyng&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
@@ -133,6 +127,8 @@
       <workItem from="1769888183773" duration="2000" />
       <workItem from="1769918070400" duration="7356000" />
       <workItem from="1769974144928" duration="29000" />
+      <workItem from="1770063246481" duration="3259000" />
+      <workItem from="1770066524427" duration="1798000" />
     </task>
     <servers />
   </component>
