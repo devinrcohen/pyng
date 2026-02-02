@@ -12,7 +12,7 @@
 static void testbed(const std::string&, SpiceEngine&);
 
 int main(int argc, char* argv[]) {
-    std::cout << "Hello World!" << std::endl;
+    std::cout << "Hola World!" << std::endl;
     SpiceEngine engine;
     const std::string netlist =
         R"(VDIVIDER.cir
