@@ -2,18 +2,19 @@
 // Created by devinrcohen on 1/27/26.
 //
 
-#include "engine.hpp"
+#include "SpiceEngine.hpp"
 #include "montecarlo.hpp"
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <complex>
 
-static void testbed(const std::string&, SpiceEngine&);
+static void testbed(const std::string&);
+static void margins_testbed(const std::string&);
 
 int main(int argc, char* argv[]) {
+    ngpp::initNgspice();
     std::cout << "Hola World!" << std::endl;
-    SpiceEngine engine;
+    //SpiceEngine engine;
     const std::string netlist =
         R"(VDIVIDER.cir
 V1 x1p 0 1.25
@@ -56,37 +57,32 @@ R1 1 2 3k
 R2 2 0 7k
 .end)";
 
-    //engine.runAnalysis(netlist.c_str(), "tran 10u 1m uic");
-    //engine.runAnalysis(netlist.c_str(), "op");
-    //engine.runCommand("options abstol=1e-12 gmin=1e-12");
-    testbed(netlist2, engine);
-    //RandomComponent c1("C1", 1e-6, 0.25, Uniform);
+    margins_testbed(netlist);
+    //testbed(netlist2);
     return EXIT_SUCCESS;
 }
 
-// void testbed(const std::string& netlist, SpiceEngine& engine) {
-//     engine.runAnalysis(netlist.c_str(), "ac dec 50 0.01 1G");
-//     engine.runCommand("let AB = x1nn/x1n");
-//     cvector AB = engine.getVector("AB");
-//     cvector freq = engine.getVector("frequency");
-//
-//     StabilityMargins margins = SpiceEngine::seekMargins(AB, freq);
-//     std::cout << "Phase Margins" << std::endl;
-//     for (int i=0; i<margins.phase_margins.size(); ++i) {
-//         std::cout << margins.freqs_0dB.at(i) << " Hz, " << margins.phase_margins.at(i) << "°" << std::endl;
-//     }
-//     std::cout << "Gain Margins" << std::endl;
-//     for (int i=0; i<margins.phase_margins.size(); ++i) {
-//         std::cout << margins.freqs_0degrees.at(i) << " Hz, " << margins.gain_margins.at(i) << " dB" << std::endl;
-//     }
-// }
+void margins_testbed(const std::string& netlist) {
+    ngpp::runAnalysis(netlist.c_str(), "ac dec 50 0.01 1G");
+    ngpp::runCommand("let AB = x1nn/x1n");
+    cvector AB = ngpp::getVector("AB");
+    cvector freq = ngpp::getVector("frequency");
 
-void testbed(const std::string& netlist, SpiceEngine& engine) {
-    SpiceEngine::loadNetlist(netlist, engine);
-    engine.getOutput();
-    engine.runCommand("reset");
-    //engine.runAnalysis(netlist.c_str(), "op");
-    //engine.runCommand("let AB = x1nn/x1n");
-    engine.runCommand("op");
-    std::cout << engine.getOutput() << std::endl;
+    ngpp::StabilityMargins margins = ngpp::seekMargins(AB, freq);
+    std::cout << "Phase Margins" << std::endl;
+    for (int i=0; i<margins.phase_margins.size(); ++i) {
+        std::cout << margins.freqs_0dB.at(i) << " Hz, " << margins.phase_margins.at(i) << "°" << std::endl;
+    }
+    std::cout << "Gain Margins" << std::endl;
+    for (int i=0; i<margins.phase_margins.size(); ++i) {
+        std::cout << margins.freqs_0degrees.at(i) << " Hz, " << margins.gain_margins.at(i) << " dB" << std::endl;
+    }
+}
+
+void testbed(const std::string& netlist) {
+    ngpp::loadNetlist(netlist);
+    ngpp::getOutput();
+    ngpp::runCommand("reset");
+    ngpp::runCommand("op");
+    std::cout << ngpp::getOutput() << std::endl;
 }
