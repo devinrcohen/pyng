@@ -1,10 +1,11 @@
 #pragma once
 
+//#define CALLBACK_DEBUG true
+
 #include <string>
-#include <sstream>
 #include <vector>
 #include <complex>
-#include <cstring>
+#include <unordered_map>
 //#include "montecarlo.hpp"
 
 // helper functions
@@ -14,9 +15,15 @@ std::vector<char*>         buildDeck(const std::string&);
 void                       freeDeck(std::vector<char*>&);
 int                        loadCircuitKeepDeck(const std::string&, std::vector<char*>&);
 
-typedef std::vector<std::complex<double>> cvector;
+typedef std::complex<double> cdouble;
+typedef std::vector<cdouble> cvector;
 
 namespace ngpp {
+    struct RunResult {
+        std::unordered_map<std::string, cvector> vectors; // waveforms: name -> complex double vector
+        std::unordered_map<std::string, cdouble> scalars; // scalars: per-run metadata / sampled params: name -> complex double
+    };
+
     enum class CpxComponent {
         REAL=0, IMAG
     };

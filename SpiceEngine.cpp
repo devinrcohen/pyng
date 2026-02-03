@@ -10,6 +10,9 @@ extern "C" {
 #include <ngspice/sharedspice.h>
 }
 
+using enum ngpp::callback;
+using enum ngpp::CpxComponent;
+
 /* -------------------- helpers for deck normalization -------------------- */
 std::vector<char*> buildDeck(const std::string & netlistStr) {
     // Build a strict, NULL-terminated deck for ngSpice_Circ:
@@ -177,22 +180,22 @@ namespace ngpp {
         if (!s) return;
         std::string label;
         switch (cb) {
-            case callback::CHAR :
+            case CHAR :
                 label = "[CHAR]";
                 break;
-            case callback::STAT :
+            case STAT :
                 label = "[STAT]";
                 break;
-            case callback::CONTROLLED_EXIT :
+            case CONTROLLED_EXIT :
                 label = "[CE]";
                 break;
-            case callback::DATA :
+            case DATA :
                 label = "[DATA]";
                 break;
-            case callback::INIT_DATA :
+            case INIT_DATA :
                 label = "[INIT_DATA]";
                 break;
-            case callback::BG :
+            case BG :
                 label = "[BG]";
                 break;
             default:
@@ -213,10 +216,25 @@ namespace ngpp {
         return ngSpice_Command(nullptr);
     }
 
+    int getComplexStride() {
+        return g_storeComplex ? 2 : 1;
+    }
+
     std::string getOutput() {
         std::string out = takeOutputSnapshot();
         clearOutput();
         return out;
+    }
+
+    std::vector<const char*> getVecNames()
+    {
+        std::lock_guard<std::mutex> lk(g_dataMutex);
+        std::vector<const char*> vecNames;
+        vecNames.reserve(g_vecNames.size());
+        for (const auto& name : g_vecNames) {
+            vecNames.push_back(name.c_str());
+        }
+        return vecNames;
     }
 
     cvector getVector(const char *name) {
@@ -239,22 +257,32 @@ namespace ngpp {
 
     void initNgspice() {
         const char* p = getenv("SPICE_SCRIPTS");
+        #ifdef CALLBACK_DEBUG
         appendOutput(p ? p : "SPICE_SCRIPTS is NOT set", callback::STAT);
+        #endif
         std::lock_guard<std::mutex> lock(g_spiceMutex);
         if (!g_initialized.load(std::memory_order_acquire)) {
-            (void)ngSpice_Init(sendChar,
-                               sendStat,
-                               controlledExit,
-                               sendData,
-                               sendInitData,
-                               bgThreadRunning,
-                               nullptr);
+            (void)ngSpice_Init(
+            #ifdef CALLBACK_DEBUG
+                       sendChar,
+                       sendStat,
+                       controlledExit,
+                       sendData,
+                       sendInitData,
+                       bgThreadRunning,
+                       nullptr
+            #else
+                       nullptr,
+                       nullptr,
+                       controlledExit,
+                       nullptr,
+                       nullptr,
+                       nullptr,
+                       nullptr
+            #endif
+            );
             g_initialized.store(true, std::memory_order_release);
         }
-    }
-
-    void say_hello() {
-        std::cout << "Hello from C++\n";
     }
 
     int loadNetlist(const char * netlist) {
@@ -274,20 +302,6 @@ namespace ngpp {
             rc |= runCommand(cmd.c_str());
         }
         return rc;
-    }
-
-    int runCommand(const char* cmd) {
-        if (!cmd || !*cmd) return 1;
-
-        // mutable buffer, which we will convert to a character array
-        // which can be passed to ngSpice_Command
-        // Note: cmd.c_str() is a constant, cannot be passed to
-        // ngSpice_Command because that expects char*, not const char*
-        std::vector<char> buf;
-        for (const char* p = cmd; *p; ++p) buf.push_back(*p);
-        buf.push_back('\0');
-
-        return ngSpice_Command(buf.data()); // char*
     }
 
     std::string runAnalysis(const char * netlist, const char * analysisCmd) {
@@ -332,32 +346,26 @@ namespace ngpp {
         return takeOutputSnapshot();
     }
 
-    std::vector<double> takeSamples() {
-        std::vector<double> arr;
-        {
-            std::lock_guard<std::mutex> lk(g_dataMutex);
-            arr.swap(g_samples);
-        }
-        return arr;
+    int runCommand(const char* cmd) {
+        if (!cmd || !*cmd) return 1;
+
+        // mutable buffer, which we will convert to a character array
+        // which can be passed to ngSpice_Command
+        // Note: cmd.c_str() is a constant, cannot be passed to
+        // ngSpice_Command because that expects char*, not const char*
+        std::vector<char> buf;
+        for (const char* p = cmd; *p; ++p) buf.push_back(*p);
+        buf.push_back('\0');
+
+        return ngSpice_Command(buf.data()); // char*
     }
 
-    int getComplexStride() {
-        return g_storeComplex ? 2 : 1;
-    }
-
-    std::vector<const char*> getVecNames()
-    {
-        std::lock_guard<std::mutex> lk(g_dataMutex);
-        std::vector<const char*> vecNames;
-        vecNames.reserve(g_vecNames.size());
-        for (const auto& name : g_vecNames) {
-            vecNames.push_back(name.c_str());
-        }
-        return vecNames;
+    void say_hello() {
+        std::cout << "Hello from C++\n";
     }
 
     StabilityMargins seekMargins(const cvector& H,
-            const cvector& frequency) {
+        const cvector& frequency) {
         StabilityMargins margins;
         size_t len = H.size();
 
@@ -381,6 +389,16 @@ namespace ngpp {
         }
         return margins;
     }
+
+    std::vector<double> takeSamples() {
+        std::vector<double> arr;
+        {
+            std::lock_guard<std::mutex> lk(g_dataMutex);
+            arr.swap(g_samples);
+        }
+        return arr;
+    }
+
     // callback stubs
     extern "C" int sendChar(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
         appendOutput(msg, callback::CHAR);
