@@ -45,11 +45,11 @@ std::vector<char*> buildDeck(const std::string & netlistStr) {
     }
 
     if (lines.empty()) {
-        lines.push_back("untitled\n");
+        lines.emplace_back("untitled\n");
     }
 
     if (!hasEnd) {
-        lines.push_back(std::string(".end\n"));
+        lines.emplace_back(".end\n");
     }
 
     // Convert to char** (NULL-terminated)
@@ -162,7 +162,7 @@ namespace ngpp {
     bool analysisRequiresComplex(const std::string& cmd) {
         std::string low;
         low.reserve(cmd.size());
-        for (unsigned char ch : cmd) low.push_back((char)std::tolower(ch));
+        for (unsigned char ch : cmd) low.push_back(static_cast<char>(std::tolower(ch)));
         // Trim leading spaces
         size_t start = low.find_first_not_of(" \t");
         if (start == std::string::npos) return false;
@@ -356,12 +356,12 @@ namespace ngpp {
         return vecNames;
     }
 
-    StabilityMargins seekMargins(cvector H,
-            cvector frequency) {
+    StabilityMargins seekMargins(const cvector& H,
+            const cvector& frequency) {
         StabilityMargins margins;
         size_t len = H.size();
 
-        for (int i=0; i<len-1; i++) { // < len -1 is on purpose, checks next frequency
+        for (int i=0; i<len-1; i++) { // < len-1 is on purpose, checks next frequency
             const double G2 = 20*log10(std::abs(H[i+1]));
             const double G1 = 20*log10(std::abs(H[i]));
             const double P2 = 180.0 / M_PI * std::arg(H[i+1]);
@@ -370,24 +370,24 @@ namespace ngpp {
             const double f1 = frequency[i].real();
             // is a gain cross-over
             if ((G1 >= 0.0 && G2 <= 0.0) || (G1 <= 0.0 && G2 >= 0.0) ) {
-                margins.freqs_0dB.push_back(f1*std::powl(f2/f1, G1/(G1-G2)));
+                margins.freqs_0dB.push_back(f1*std::pow(f2/f1, G1/(G1-G2)));
                 margins.phase_margins.push_back((P2*G1-P1*G2)/(G1-G2));
             }
             // is a phase cross-over
             if ((P1 >= 0.0 && P2 <= 0.0) || (P1 <= 0.0 && P2 >= 0.0) ) {
-                margins.freqs_0degrees.push_back(f1*std::powl(f2/f1, P1/(P1-P2)));
+                margins.freqs_0degrees.push_back(f1*std::pow(f2/f1, P1/(P1-P2)));
                 margins.gain_margins.push_back((G2*P1-G1*P2)/(P1-P2));
             }
         }
         return margins;
     }
     // callback stubs
-    extern "C" int sendChar(char* msg, int, void*) {
+    extern "C" int sendChar(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
         appendOutput(msg, callback::CHAR);
         return 0;
     }
 
-    extern "C" int sendStat(char* msg, int, void*) {
+    extern "C" int sendStat(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
         appendOutput(msg, callback::STAT);
         return 0;
     }
@@ -401,10 +401,9 @@ namespace ngpp {
 
     extern "C" int sendData(pvecvaluesall vec, int num_structs, int, void*) {
         std::lock_guard<std::mutex> lk(g_dataMutex);
-        std::string out;
 
         const int n = vec->veccount;
-        out = "veccount: " + std::to_string(n);
+        std::string out = "veccount: " + std::to_string(n);
         out += "\nnum_cstructs: " + std::to_string(num_structs);
         if (!g_storeComplex) {
             g_samples.reserve(g_samples.size() + n);
@@ -490,7 +489,7 @@ namespace ngpp {
     }
 
     static int validateDeck(char** deck) {
-        if(!deck) return 1;
+        if(!*deck) return 1;
         for (size_t i = 0; deck[i]; ++i) {
             const char *s = deck[i];
             if (!s) return 2;
@@ -504,31 +503,26 @@ namespace ngpp {
     }
 
     int runCirc(char** deck) {
-        if (!deck) return 1;
+        if (!deck || !*deck) return 1;
         int v = validateDeck(deck);
-
         std::string diagnostic = "Error " + std::to_string(v) + ": ";
         switch (v) {
             case 1:
-                diagnostic += "No deck found";
-                break;
+                diagnostic += "No deck found"; break;
             case 2:
             case 3:
-                diagnostic += "Empty string";
-                break;
+                diagnostic += "Empty string"; break;
             case 4:
-                diagnostic += "String has length of 0";
-                break;
+                diagnostic += "String has length of 0"; break;
             case 5:
-                diagnostic += "No newline";
-                break;
+                diagnostic += "No newline"; break;
             case 6:
-                diagnostic += "Standalone newline";
-                break;
+                diagnostic += "Standalone newline"; break;
             default:
-                diagnostic += "Unknown error";
-                appendOutput(diagnostic.c_str(), callback::STAT);
+                diagnostic += "Unknown error"; break;
+
         }
+        appendOutput(diagnostic.c_str(), callback::STAT);
         return ngSpice_Circ(deck);
     }
 

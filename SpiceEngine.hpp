@@ -5,7 +5,7 @@
 #include <vector>
 #include <complex>
 #include <cstring>
-#include "montecarlo.hpp"
+//#include "montecarlo.hpp"
 
 // helper functions
 std::string                normalizeLine(std::string);
@@ -48,7 +48,7 @@ namespace ngpp {
     int                        runCommand(const char*);
     void                       setSpiceScriptsPath(const char*);
     void                       say_hello();
-    StabilityMargins           seekMargins(cvector, cvector);
+    StabilityMargins           seekMargins(const cvector&, const cvector&);
     std::vector<double>        takeSamples();
 
     // helper functions
