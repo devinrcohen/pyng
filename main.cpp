@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Hola World!" << std::endl;
     //SpiceEngine engine;
     const std::string netlist =
-        R"(VDIVIDER.cir
+R"(VDIVIDER.cir
 V1 x1p 0 1.25
 R1 x1nn 0 10k
 R2 x1out vout 0
@@ -51,14 +51,14 @@ R5 3 N004 {rout}
 .end)";
 
     const std::string netlist2 =
-        R"(VDIVIDER.cir
+R"(VDIVIDER.cir
 V1 1 0 10
 R1 1 2 3k
 R2 2 0 7k
 .end)";
 
     margins_testbed(netlist);
-    //testbed(netlist2);
+    testbed(netlist2);
     return EXIT_SUCCESS;
 }
 
