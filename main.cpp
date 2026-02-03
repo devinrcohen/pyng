@@ -10,6 +10,7 @@
 
 static void testbed(const std::string&);
 static void margins_testbed(const std::string&);
+void multirun_op(const std::string&, const int&);
 
 int main(int argc, char* argv[]) {
     ngpp::initNgspice();
@@ -53,20 +54,21 @@ R5 3 N004 {rout}
     const std::string netlist2 =
 R"(VDIVIDER.cir
 V1 1 0 10
-R1 1 2 3k
-R2 2 0 7k
+R1 1 2 R = {gauss(3k,0.1,10)}
+R2 2 0 R = {gauss(7k,0.1,10)}
 .end)";
 
-    margins_testbed(netlist);
-    testbed(netlist2);
+    //margins_testbed(netlist);
+    //testbed(netlist2);
+    multirun_op(netlist2, 100);
     return EXIT_SUCCESS;
 }
 
 void margins_testbed(const std::string& netlist) {
     ngpp::runAnalysis(netlist.c_str(), "ac dec 50 0.01 1G");
     ngpp::runCommand("let AB = x1nn/x1n");
-    cvector AB = ngpp::getVector("AB");
-    cvector freq = ngpp::getVector("frequency");
+    const cvector AB = ngpp::getVector("AB");
+    const cvector freq = ngpp::getVector("frequency");
 
     ngpp::StabilityMargins margins = ngpp::seekMargins(AB, freq);
     std::cout << "Phase Margins" << std::endl;
@@ -85,4 +87,23 @@ void testbed(const std::string& netlist) {
     ngpp::runCommand("reset");
     ngpp::runCommand("op");
     std::cout << ngpp::getOutput() << std::endl;
+}
+
+void multirun_op(const std::string& netlist, const int& runs) {
+    //ngpp::loadNetlist(netlist);
+
+    for (int k = 0; k < runs; ++k) {
+        ngpp::loadNetlist(netlist); // re-load circuit (fresh eval)
+        ngpp::runCommand("reset");
+        ngpp::runCommand("op");
+
+        // Print sampled component values + result of interest
+        //ngpp::runCommand("print @R1[resistance] @R2[resistance] v(2)");
+        ngpp::runCommand("let __r1 = @r1[r]");
+        ngpp::runCommand("let __r2 = @r2[r]");
+        auto r1 = ngpp::getVector("__r1");
+        auto r2 = ngpp::getVector("__r2");
+        const std::string out = ngpp::getOutput();
+        std::cout << "run " << k+1 << ":, R1: " << r1[0].real() << " R2: " << r2[0].real() << " \n================" << out << "\n";
+    }
 }
