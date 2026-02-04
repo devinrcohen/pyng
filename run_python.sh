@@ -1,30 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---------------- USER SETTINGS ----------------
-PY_SCRIPT="${PY_SCRIPT:-smoketest_pyng.py}"      # default script to run
-BUILD_DIR="${BUILD_DIR:-cmake-build-pyng-conda}" # where the .so lives
-# -----------------------------------------------
+PY_SCRIPT="${1:-smoketest_pyng.py}"
+BUILD_DIR="${BUILD_DIR:-cmake-build-pyng-conda}"
+
+# Prefer active conda python if present, otherwise fall back to python3/python.
+if [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
+  PYTHON="${CONDA_PREFIX}/bin/python"
+else
+  PYTHON="$(command -v python3 || command -v python)"
+fi
 
 echo "=== run_python.sh ==="
-echo "PWD:        $PWD"
-echo "BUILD_DIR:  $BUILD_DIR"
-echo "PY_SCRIPT:  $PY_SCRIPT"
-echo "PYTHON:     $(command -v python || true)"
-echo "CONDA_PREFIX: ${CONDA_PREFIX:-<unset>}"
+echo "PWD:         $(pwd)"
+echo "BUILD_DIR:   ${BUILD_DIR}"
+echo "PY_SCRIPT:   ${PY_SCRIPT}"
+echo "PYTHON:      ${PYTHON}"
+echo "CONDA_PREFIX:${CONDA_PREFIX:-<unset>}"
 
-if [[ ! -d "$BUILD_DIR" ]]; then
-  echo "[FAIL] Build directory not found: $BUILD_DIR"
-  exit 1
-fi
+# Ensure the extension module is discoverable.
+# For a pybind11_add_module(pyng ...) built with Ninja, the .so ends up directly in BUILD_DIR.
+export PYTHONPATH="$(pwd)/${BUILD_DIR}:$(pwd):${PYTHONPATH:-}"
 
-if [[ ! -f "$PY_SCRIPT" ]]; then
-  echo "[FAIL] Python script not found: $PY_SCRIPT"
-  exit 1
-fi
-
-# Ensure the build dir is on PYTHONPATH so "import pyng" resolves.
-export PYTHONPATH="$PWD/$BUILD_DIR${PYTHONPATH:+:$PYTHONPATH}"
-
-echo "[INFO] Running: python $PY_SCRIPT"
-python "$PY_SCRIPT"
+echo "[INFO] Running: ${PYTHON} ${PY_SCRIPT}"
+exec "${PYTHON}" "${PY_SCRIPT}"
