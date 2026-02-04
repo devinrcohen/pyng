@@ -1,5 +1,5 @@
-build/
 cmake-build-*/
-.idea/
+build/
 out/
 *.iml
+.idea/

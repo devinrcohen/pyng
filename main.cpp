@@ -2,20 +2,23 @@
 // Created by devinrcohen on 1/27/26.
 //
 
-#include "engine.hpp"
+#include "SpiceEngine.hpp"
 #include "montecarlo.hpp"
+#include <format>
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include <complex>
 
-static void testbed(const std::string&, SpiceEngine&);
+static void testbed(const std::string&);
+static void margins_testbed(const std::string&);
+void multirun_op(const std::string&, const int&);
 
 int main(int argc, char* argv[]) {
-    std::cout << "Hola mundo!" << std::endl;
-    SpiceEngine engine;
+    ngpp::initNgspice();
+    std::cout << "Hola World!" << std::endl;
+    //SpiceEngine engine;
     const std::string netlist =
-        R"(VDIVIDER.cir
+R"(VDIVIDER.cir
 V1 x1p 0 1.25
 R1 x1nn 0 10k
 R2 x1out vout 0
@@ -50,43 +53,68 @@ R5 3 N004 {rout}
 .end)";
 
     const std::string netlist2 =
-        R"(VDIVIDER.cir
+R"(VDIVIDER.cir
 V1 1 0 10
-R1 1 2 3k
-R2 2 0 7k
+R1 1 2 R = {gauss(3k,0.1,10)}
+R2 2 0 R = {gauss(7k,0.1,10)}
 .end)";
 
-    //engine.runAnalysis(netlist.c_str(), "tran 10u 1m uic");
-    //engine.runAnalysis(netlist.c_str(), "op");
-    //engine.runCommand("options abstol=1e-12 gmin=1e-12");
-    testbed(netlist2, engine);
-    //RandomComponent c1("C1", 1e-6, 0.25, Uniform);
+    //margins_testbed(netlist);
+    //testbed(netlist2);
+    multirun_op(netlist2, 100);
+
+    std::tuple myTuple = {"R1", "2k", "0.1", "gauss"};
+    const auto& [a, b, c, d] = myTuple;
+    std::cout <<
+std::format(R"({}
+{}
+{}
+{}
+)", a, b, c, d);
+
     return EXIT_SUCCESS;
 }
 
-// void testbed(const std::string& netlist, SpiceEngine& engine) {
-//     engine.runAnalysis(netlist.c_str(), "ac dec 50 0.01 1G");
-//     engine.runCommand("let AB = x1nn/x1n");
-//     cvector AB = engine.getVector("AB");
-//     cvector freq = engine.getVector("frequency");
-//
-//     StabilityMargins margins = SpiceEngine::seekMargins(AB, freq);
-//     std::cout << "Phase Margins" << std::endl;
-//     for (int i=0; i<margins.phase_margins.size(); ++i) {
-//         std::cout << margins.freqs_0dB.at(i) << " Hz, " << margins.phase_margins.at(i) << "°" << std::endl;
-//     }
-//     std::cout << "Gain Margins" << std::endl;
-//     for (int i=0; i<margins.phase_margins.size(); ++i) {
-//         std::cout << margins.freqs_0degrees.at(i) << " Hz, " << margins.gain_margins.at(i) << " dB" << std::endl;
-//     }
-// }
+void margins_testbed(const std::string& netlist) {
+    ngpp::runAnalysis(netlist.c_str(), "ac dec 50 0.01 1G");
+    ngpp::runCommand("let AB = x1nn/x1n");
+    const cvector AB = ngpp::getVector("AB");
+    const cvector freq = ngpp::getVector("frequency");
 
-void testbed(const std::string& netlist, SpiceEngine& engine) {
-    SpiceEngine::loadNetlist(netlist, engine);
-    engine.getOutput();
-    engine.runCommand("reset");
-    //engine.runAnalysis(netlist.c_str(), "op");
-    //engine.runCommand("let AB = x1nn/x1n");
-    engine.runCommand("op");
-    std::cout << engine.getOutput() << std::endl;
+    ngpp::StabilityMargins margins = ngpp::seekMargins(AB, freq);
+    std::cout << "Phase Margins" << std::endl;
+    for (int i=0; i<margins.phase_margins.size(); ++i) {
+        std::cout << margins.freqs_0dB.at(i) << " Hz, " << margins.phase_margins.at(i) << "°" << std::endl;
+    }
+    std::cout << "Gain Margins" << std::endl;
+    for (int i=0; i<margins.phase_margins.size(); ++i) {
+        std::cout << margins.freqs_0degrees.at(i) << " Hz, " << margins.gain_margins.at(i) << " dB" << std::endl;
+    }
+}
+
+void testbed(const std::string& netlist) {
+    ngpp::loadNetlist(netlist);
+    ngpp::getOutput();
+    ngpp::runCommand("reset");
+    ngpp::runCommand("op");
+    std::cout << ngpp::getOutput() << std::endl;
+}
+
+void multirun_op(const std::string& netlist, const int& runs) {
+    //ngpp::loadNetlist(netlist);
+
+    for (int k = 0; k < runs; ++k) {
+        ngpp::loadNetlist(netlist); // re-load circuit (fresh eval)
+        ngpp::runCommand("reset");
+        ngpp::runCommand("op");
+
+        // Print sampled component values + result of interest
+        //ngpp::runCommand("print @R1[resistance] @R2[resistance] v(2)");
+        ngpp::runCommand("let __r1 = @r1[r]");
+        ngpp::runCommand("let __r2 = @r2[r]");
+        auto r1 = ngpp::getVector("__r1");
+        auto r2 = ngpp::getVector("__r2");
+        const std::string out = ngpp::getOutput();
+        std::cout << "run " << k+1 << ":, R1: " << r1[0].real() << " R2: " << r2[0].real() << " \n================" << out << "\n";
+    }
 }
