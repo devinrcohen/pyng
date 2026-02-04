@@ -17,6 +17,14 @@ def main() -> int:
     build_dir = os.environ.get("PYNG_BUILD_DIR", "cmake-build-pyng-conda")
     build_dir = os.path.abspath(build_dir)
 
+    netlist = """
+VDIVIDER.cir
+V1 1 0 10
+R1 1 2 R = {gauss(3k,0.1,10)}
+R2 2 0 R = {gauss(7k,0.1,10)}
+.end
+"""
+
     print("=== pyng smoketest ===")
     print(f"Platform: {platform.platform()}")
     print(f"Python:   {sys.version.split()[0]}")
@@ -89,6 +97,21 @@ def main() -> int:
     except Exception:
         print(traceback.format_exc())
         die("pyng.unit_phasors failed")
+
+    try:
+        pyng.ngspice_init()
+    except Exception:
+        print(traceback.format_exc())
+        die("pyng.LoadNetlist failed")
+
+    try:
+        if pyng.load_netlist(netlist) == 1:
+            pyng.run_command("reset")
+            pyng.run_command("op")
+
+    except Exception:
+        print(traceback.format_exc())
+        die("pyng.LoadNetlist failed")
 
     ok("All smoketests passed.")
     return 0
