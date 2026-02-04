@@ -6,12 +6,29 @@
 #include <pybind11/stl.h>          // std::vector, std::string, etc.
 #include <pybind11/complex.h>      // std::complex
 #include <pybind11/numpy.h>        // py::array_t
+#include <iostream>
+#include "SpiceEngine.hpp"
 
 namespace py = pybind11;
 
 // Simple smoke-test function
 static int add_ints(int a, int b) {
+    ngpp::say_hello();
     return a + b;
+}
+
+static void ngspice_init() {
+    ngpp::initNgspice();
+    std::cout << ngpp::getOutput() << std::endl;
+}
+
+static void run_command(std::string command) {
+    ngpp::runCommand(command.c_str());
+    std::cout << ngpp::getOutput() << std::endl;
+}
+
+static int load_netlist(const std::string& netlist) {
+    return ngpp::loadNetlist(netlist.c_str());
 }
 
 // Example: return a dict (you’ll use this style for MC results)
@@ -50,6 +67,9 @@ PYBIND11_MODULE(pyng, m) {
     m.def("info", &info, "Return basic module info");
     m.def("linspace", &linspace, py::arg("n"), "Return [0..n-1] as float64 numpy array");
     m.def("unit_phasors", &unit_phasors, py::arg("n"), "Return complex64 phasors array");
+    m.def("load_netlist", &load_netlist, py::arg("load_netlist"), "Load netlist into ngspice");
+    m.def("ngspice_init", &ngspice_init, "Initialize ngspice");
+    m.def("run_command", &run_command, py::arg("run_command"), "Run SPICE command");
 }
 
 
