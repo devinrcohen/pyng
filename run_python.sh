@@ -4,7 +4,7 @@ set -euo pipefail
 # ---------------- USER SETTINGS ----------------
 PY_SCRIPT="${PY_SCRIPT:-smoketest_pyng.py}"      # default script to run
 BUILD_DIR="${BUILD_DIR:-cmake-build-pyng-conda}" # where the .so lives
-# ----------------------------------------------
+# -----------------------------------------------
 
 echo "=== run_python.sh ==="
 echo "PWD:        $PWD"
