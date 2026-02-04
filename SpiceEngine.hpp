@@ -1,11 +1,14 @@
 #pragma once
 
-//#define CALLBACK_DEBUG true
+#define CALLBACK_DEBUG true
 
 #include <string>
 #include <vector>
 #include <complex>
 #include <unordered_map>
+#include <cstring> // strlen, possibly strdup
+//#include <string.h> // strdup on POSIX
+#include <cstdlib> // getenv, free
 #include <tuple>
 //#include "montecarlo.hpp"
 

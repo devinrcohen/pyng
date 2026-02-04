@@ -369,7 +369,7 @@ namespace ngpp {
         StabilityMargins margins;
         size_t len = H.size();
 
-        for (int i=0; i<len-1; i++) { // < len-1 is on purpose, checks next frequency
+        for (size_t i=0; i<len-1; i++) { // < len-1 is on purpose, checks next frequency
             const double G2 = 20*log10(std::abs(H[i+1]));
             const double G1 = 20*log10(std::abs(H[i]));
             const double P2 = 180.0 / M_PI * std::arg(H[i+1]);
