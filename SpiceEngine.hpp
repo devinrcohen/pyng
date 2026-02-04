@@ -6,6 +6,7 @@
 #include <vector>
 #include <complex>
 #include <unordered_map>
+#include <tuple>
 //#include "montecarlo.hpp"
 
 // helper functions

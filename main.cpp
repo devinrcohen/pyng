@@ -4,6 +4,7 @@
 
 #include "SpiceEngine.hpp"
 #include "montecarlo.hpp"
+#include <format>
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -61,6 +62,16 @@ R2 2 0 R = {gauss(7k,0.1,10)}
     //margins_testbed(netlist);
     //testbed(netlist2);
     multirun_op(netlist2, 100);
+
+    std::tuple myTuple = {"R1", "2k", "0.1", "gauss"};
+    const auto& [a, b, c, d] = myTuple;
+    std::cout <<
+std::format(R"({}
+{}
+{}
+{}
+)", a, b, c, d);
+
     return EXIT_SUCCESS;
 }
 

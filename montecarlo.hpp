@@ -5,6 +5,8 @@
 #pragma once
 #include <string>
 #include <unordered_map>
+#include <random>
+#include <tuple>
 
 enum DistributionType {
     Uniform,
@@ -19,6 +21,7 @@ public:
     [[nodiscard]] float Tol() const noexcept { return tol; }
     [[nodiscard]] DistributionType Dist() const noexcept { return dist; }
     [[nodiscard]] std::string Name() const noexcept { return name; }
+    static void component(std::tuple<std::string, std::string, std::string, std::string>);
 private:
     std::string name;
     DistributionType dist;
