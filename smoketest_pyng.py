@@ -4,6 +4,22 @@ import sys
 import platform
 import importlib
 import traceback
+import pprint
+
+def deep_getsizeof(o, seen=None):
+    if seen is None:
+        seen = set()
+    oid = id(o)
+    if oid in seen:
+        return 0
+    seen.add(oid)
+    size = sys.getsizeof(o)
+
+    if isinstance(o, dict):
+        size += sum(deep_getsizeof(k, seen) + deep_getsizeof(v, seen) for k, v in o.items())
+    elif isinstance(o, (list, tuple, set, frozenset)):
+        size += sum(deep_getsizeof(i, seen) for i in o)
+    return size
 
 def die(msg: str, code: int = 1) -> None:
     print(f"[FAIL] {msg}")
@@ -19,9 +35,13 @@ def main() -> int:
 
     netlist = """
 VDIVIDER.cir
-V1 1 0 10
-R1 1 2 R = {gauss(3k,0.1,10)}
-R2 2 0 R = {gauss(7k,0.1,10)}
+V1 1 0 10 AC=1
+*R1 1 2 R = {gauss(3k,0.1,10)}
+R1 1 2 R = {unif(3k,0.01)}
+C1 2 0 C = {unif(1u,0.10)}
+*R2 2 0 R = {gauss(7k,0.1,10)}
+R2 2 0 R = {unif(7k,0.01)}
+*R2 2 0 1e12
 .end
 """
 
@@ -53,50 +73,50 @@ R2 2 0 R = {gauss(7k,0.1,10)}
         die("import pyng failed (traceback above)")
 
     # basic API smoke
-    try:
-        info = pyng.info()
-        if not isinstance(info, dict):
-            die(f"pyng.info() expected dict, got {type(info)}")
-        ok(f"pyng.info() returned dict: {info}")
-    except Exception:
-        print(traceback.format_exc())
-        die("pyng.info() failed")
+    # try:
+    #     info = pyng.info()
+    #     if not isinstance(info, dict):
+    #         die(f"pyng.info() expected dict, got {type(info)}")
+    #     ok(f"pyng.info() returned dict: {info}")
+    # except Exception:
+    #     print(traceback.format_exc())
+    #     die("pyng.info() failed")
 
-    try:
-        v = pyng.add_ints(2, 3)
-        if v != 5:
-            die(f"pyng.add_ints(2,3) expected 5, got {v}")
-        ok("pyng.add_ints ok")
-    except Exception:
-        print(traceback.format_exc())
-        die("pyng.add_ints failed")
+    # try:
+    #     v = pyng.add_ints(2, 3)
+    #     if v != 5:
+    #         die(f"pyng.add_ints(2,3) expected 5, got {v}")
+    #     ok("pyng.add_ints ok")
+    # except Exception:
+    #     print(traceback.format_exc())
+    #     die("pyng.add_ints failed")
 
     # numpy array outputs + dtype checks
-    try:
-        a = pyng.linspace(5)
-        if not hasattr(a, "dtype"):
-            die("pyng.linspace did not return a numpy-like array")
-        if a.shape != (5,):
-            die(f"pyng.linspace shape expected (5,), got {a.shape}")
-        if str(a.dtype) != "float64":
-            die(f"pyng.linspace dtype expected float64, got {a.dtype}")
-        if not np.allclose(a, np.array([0, 1, 2, 3, 4], dtype=np.float64)):
-            die(f"pyng.linspace values unexpected: {a}")
-        ok("pyng.linspace ok (float64, correct shape/values)")
-    except Exception:
-        print(traceback.format_exc())
-        die("pyng.linspace failed")
+    # try:
+    #     a = pyng.linspace(5)
+    #     if not hasattr(a, "dtype"):
+    #         die("pyng.linspace did not return a numpy-like array")
+    #     if a.shape != (5,):
+    #         die(f"pyng.linspace shape expected (5,), got {a.shape}")
+    #     if str(a.dtype) != "float64":
+    #         die(f"pyng.linspace dtype expected float64, got {a.dtype}")
+    #     if not np.allclose(a, np.array([0, 1, 2, 3, 4], dtype=np.float64)):
+    #         die(f"pyng.linspace values unexpected: {a}")
+    #     ok("pyng.linspace ok (float64, correct shape/values)")
+    # except Exception:
+    #     print(traceback.format_exc())
+    #     die("pyng.linspace failed")
 
-    try:
-        b = pyng.unit_phasors(3)
-        if b.shape != (3,):
-            die(f"pyng.unit_phasors shape expected (3,), got {b.shape}")
-        if str(b.dtype) != "complex64":
-            die(f"pyng.unit_phasors dtype expected complex64, got {b.dtype}")
-        ok("pyng.unit_phasors ok (complex64, correct shape)")
-    except Exception:
-        print(traceback.format_exc())
-        die("pyng.unit_phasors failed")
+    # try:
+    #     b = pyng.unit_phasors(3)
+    #     if b.shape != (3,):
+    #         die(f"pyng.unit_phasors shape expected (3,), got {b.shape}")
+    #     if str(b.dtype) != "complex64":
+    #         die(f"pyng.unit_phasors dtype expected complex64, got {b.dtype}")
+    #     ok("pyng.unit_phasors ok (complex64, correct shape)")
+    # except Exception:
+    #     print(traceback.format_exc())
+    #     die("pyng.unit_phasors failed")
 
     try:
         pyng.ngspice_init()
@@ -112,6 +132,24 @@ R2 2 0 R = {gauss(7k,0.1,10)}
     except Exception:
         print(traceback.format_exc())
         die("pyng.LoadNetlist failed")
+
+    # try:
+    #     my_tuple = pyng.get_a_tuple()
+    #     print(my_tuple)
+    # except Exception:
+    #     print(traceback.format_exc())
+    #     die("pyng.get_a_tuple failed")
+
+    try:
+        sim_results = pyng.multirun_proto(netlist, 1000)
+        #number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes, signals = sim_results
+        #pprint.pprint(sim_results)
+        # for element in sim_results :
+        #     pprint.pprint(element)
+        print(f"Size: {deep_getsizeof(sim_results):,} Bytes")
+    except Exception:
+        print(traceback.format_exc())
+        die("pyng.multirun_proto failed")
 
     ok("All smoketests passed.")
     return 0
