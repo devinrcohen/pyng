@@ -5,7 +5,41 @@ import platform
 import importlib
 import traceback
 import pprint
+from pickletools import uint8
 
+import numpy as np
+import matplotlib.pyplot as plt
+
+def unpack_multirun_tuple(sim_results):
+    n_runs, param_names, signal_names, run_ids, npts, param_vals, signals = sim_results
+
+    n_signals = len(signal_names)
+    assert len(signals) == n_runs * n_signals, "signals length doesn't match runs*signals"
+    assert len(param_vals) == n_runs * len(param_names), "param_vals length doesn't match runs*params"
+
+    # params: (runs, params)
+    params = np.asarray(param_vals, dtype=np.complex128).reshape(n_runs, len(param_names))
+
+    # signals: list of runs, each run is dict name->ndarray
+    runs = []
+    idx = 0
+    for r in range(n_runs):
+        run = {}
+        for sname in signal_names:
+            v = np.asarray(signals[idx], dtype=np.complex128)
+            idx += 1
+            run[sname] = v
+        runs.append(run)
+
+    return {
+        "n_runs": n_runs,
+        "param_names": param_names,
+        "signal_names": signal_names,
+        "run_ids": np.asarray(run_ids, dtype=np.int64),
+        "npts": np.asarray(npts, dtype=np.int64),
+        "params": params,
+        "runs": runs,   # ragged per-run arrays
+    }
 def deep_getsizeof(o, seen=None):
     if seen is None:
         seen = set()
@@ -141,12 +175,28 @@ R2 2 0 R = {unif(7k,0.01)}
     #     die("pyng.get_a_tuple failed")
 
     try:
-        sim_results = pyng.multirun_proto(netlist, 1000)
-        #number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes, signals = sim_results
-        #pprint.pprint(sim_results)
-        # for element in sim_results :
-        #     pprint.pprint(element)
-        print(f"Size: {deep_getsizeof(sim_results):,} Bytes")
+        # sim_results = pyng.multirun_proto(netlist, 100)
+        # number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes_per_run, signals = sim_results
+        number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes_per_run, x_label, signals = pyng.multirun_proto(netlist, 100)
+        run_indices = np.array(run_indices, dtype=np.uint64)
+        num_datapoints = np.array(num_datapoints, dtype=np.uint64)
+        param_values_per_run = np.array(param_values_per_run, dtype=np.float64)
+        x_axes_per_run = np.array(x_axes_per_run, dtype=np.float64)
+        signals = np.array(signals, dtype=np.complex128)
+        #some_array = np.block([run_indices, x_axes_per_run])
+        print(f"[number_of_runs]: {deep_getsizeof(number_of_runs):,} Bytes")
+        print(f"[param_names]: {deep_getsizeof(param_names):,} Bytes")
+        print(f"[signal_names]: {deep_getsizeof(signal_names):,} Bytes")
+        print(f"[run_indices]: {deep_getsizeof(run_indices):,} Bytes")
+        print(f"[num_datapoints]: {deep_getsizeof(num_datapoints):,} Bytes")
+        print(f"[param_values_per_run]: {deep_getsizeof(param_values_per_run):,} Bytes")
+        print(f"[x_axes]: {deep_getsizeof(x_axes_per_run):,} Bytes")
+        print(f"[x_label]: {deep_getsizeof(x_label)} Bytes")
+        print(f"[signals]: {deep_getsizeof(signals):,} Bytes")
+        # print(f"Total size: {deep_getsizeof(sim_results):,} Bytes")
+        # freqs_30 = x_axes[30-1,:]
+        # freq_30_51 = freqs_30[51-1]
+        # print(f"{freq_30_51}")
     except Exception:
         print(traceback.format_exc())
         die("pyng.multirun_proto failed")
