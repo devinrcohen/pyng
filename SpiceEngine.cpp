@@ -564,6 +564,7 @@ namespace ngpp {
         package.param_names.emplace_back("__c1");
         package.param_names.emplace_back("__r1");
         package.param_names.emplace_back("__r2");
+        package.x_label = "frequency";
         for (int k = 1; k <= runs; ++k) { // index starts at 1
             RunResult result;
             loadNetlist(netlist); // re-load circuit (fresh eval)
@@ -575,7 +576,10 @@ namespace ngpp {
             runCommand("let __c1 = @c1[c]");
             // names are common to the entire package but need at least one run to obtain
             if (k == 1) {
-                package.signal_names = g_vecNames;
+                //package.signal_names = g_vecNames; // includes independent variable
+                package.signal_names.clear();
+                package.signal_names.emplace_back("v(1)");
+                package.signal_names.emplace_back("v(2)");
             }
             auto c1 = getVector("__c1");
             auto r1 = getVector("__r1");
@@ -592,8 +596,10 @@ namespace ngpp {
             result.param_values.emplace_back(scalar_or_zero(r2));
 
             auto frequency = getVector("frequency");
+            auto v1 = getVector("v(1)");
             auto v2 = getVector("v(2)");
             //result.signal_vectors.emplace_back(frequency);
+            result.signal_vectors.emplace_back(v1);
             result.signal_vectors.emplace_back(v2);
             //const std::string out = getOutput();
             result.this_run = k;

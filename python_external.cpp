@@ -74,8 +74,9 @@ static tuple<size_t /*num_of_runs*/,
             vector<string>/*signal_names*/,
             vector<size_t>/*run_indices*/,
             vector<size_t>/*num_datapoints_vec*/,
-            vector<vector<complex<double>>>/*param_values_per_run*/,
-            vector<vector<complex<double>>>/*x_axes*/,
+            vector<vector<double>>/*param_values_per_run*/,
+            vector<vector<double>>/*x_axes*/,
+            string,/*x_label*/
             vector<vector<complex<double>>>/*signal_vectors*/> multirun_proto(const string& netlist, const int& runs) {
     ngpp::SimPackage package = ngpp::multirunProto(netlist, runs);
     // unpack results to send to python
@@ -88,18 +89,31 @@ static tuple<size_t /*num_of_runs*/,
     run_indices.reserve(package.number_of_runs);
     vector<size_t> num_datapoints_vec;
     num_datapoints_vec.reserve(package.number_of_runs);
-    vector<vector<complex<double>>> param_values_per_run;
+    vector<vector<double>> param_values_per_run;
     param_values_per_run.reserve(package.number_of_runs);
     vector<vector<complex<double>>> signal_vectors;
     signal_vectors.reserve(package.number_of_runs);
-    vector<vector<complex<double>>> x_axes;
+    vector<vector<double>> x_axes;
     x_axes.reserve(package.number_of_runs);
 
     for (const auto& result : package.results) {
+        if (package.signal_names.size() != result.signal_vectors.size()) {
+            throw std::runtime_error("signal_names and signal_vectors length mismatch");
+        }
         run_indices.emplace_back(result.this_run);
         num_datapoints_vec.emplace_back(result.x_axis.size());
-        param_values_per_run.emplace_back(result.param_values);
-        x_axes.emplace_back(result.x_axis);
+        // param and x-axis values to real
+        auto get_real_vector = [](const auto& comp_vec) {
+            vector<double> real_vec;
+            real_vec.reserve(comp_vec.size());
+            for (const auto& element : comp_vec) {
+                real_vec.emplace_back(element.real());
+            }
+            return real_vec;
+        };
+        param_values_per_run.emplace_back(get_real_vector(result.param_values));
+        x_axes.emplace_back(get_real_vector(result.x_axis));
+
         for (const auto& signal_vec : result.signal_vectors) {
             signal_vectors.emplace_back(signal_vec);
         }
@@ -112,6 +126,7 @@ static tuple<size_t /*num_of_runs*/,
                 num_datapoints_vec,
                 param_values_per_run,
                 x_axes,
+                package.x_label,
                 signal_vectors};
 }
 PYBIND11_MODULE(pyng, m) {

@@ -38,6 +38,7 @@ namespace ngpp {
 
     struct RunResult {
         size_t this_run; // unique, common to RunResult
+
         std::vector<std::complex<double>> x_axis;
         std::vector<std::vector<std::complex<double>>> signal_vectors; // make sure to align with the SimPackage signal_names
         std::vector<std::complex<double>> param_values; // even parameters are treated as complex by this library
@@ -45,6 +46,7 @@ namespace ngpp {
 
     struct SimPackage {
         size_t number_of_runs;
+        std::string x_label;
         std::vector<std::string> signal_names;
         std::vector<std::string> param_names;
         std::vector<RunResult> results;
@@ -53,6 +55,8 @@ namespace ngpp {
     enum class CpxComponent {
         REAL=0, IMAG
     };
+
+
 
     // callback identifiers
     enum class callback {
