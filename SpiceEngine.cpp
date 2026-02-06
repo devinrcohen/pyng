@@ -5,6 +5,7 @@
 #include <sstream>
 #include <cmath>
 #include <condition_variable>
+#include <map>
 
 extern "C" {
 #include <ngspice/sharedspice.h>
@@ -226,24 +227,23 @@ namespace ngpp {
         return out;
     }
 
-    std::vector<const char*> getVecNames()
+    std::vector<std::string> getVecNames() // do we even need this?
     {
         std::lock_guard<std::mutex> lk(g_dataMutex);
-        std::vector<const char*> vecNames;
+        std::vector<std::string> vecNames;
         vecNames.reserve(g_vecNames.size());
         for (const auto& name : g_vecNames) {
-            vecNames.push_back(name.c_str());
+            vecNames.emplace_back(name);
         }
         return vecNames;
     }
 
-    cvector getVector(const char *name) {
-        cvector out;
+    std::vector<std::complex<double>> getVector(const char *name) {
+        std::vector<cdouble> out;
         pvector_info vecInfo = ngGet_Vec_Info(const_cast<char*>(name));
         auto n = static_cast<size_t>(vecInfo->v_length);
         out.reserve(n);
         if (!vecInfo) return out;
-
         if (vecInfo->v_compdata) {
             for (size_t i = 0; i < n; ++i) out.emplace_back(vecInfo->v_compdata[i].cx_real,
                 vecInfo->v_compdata[i].cx_imag);
@@ -256,14 +256,13 @@ namespace ngpp {
     }
 
     void initNgspice() {
+#ifdef CALLBACK_DEBUG
         const char* p = getenv("SPICE_SCRIPTS");
-        #ifdef CALLBACK_DEBUG
         appendOutput(p ? p : "SPICE_SCRIPTS is NOT set", callback::STAT);
-        #endif
+#endif
         std::lock_guard<std::mutex> lock(g_spiceMutex);
         if (!g_initialized.load(std::memory_order_acquire)) {
             (void)ngSpice_Init(
-            #ifdef CALLBACK_DEBUG
                        sendChar,
                        sendStat,
                        controlledExit,
@@ -271,15 +270,6 @@ namespace ngpp {
                        sendInitData,
                        bgThreadRunning,
                        nullptr
-            #else
-                       nullptr,
-                       nullptr,
-                       controlledExit,
-                       nullptr,
-                       nullptr,
-                       nullptr,
-                       nullptr
-            #endif
             );
             g_initialized.store(true, std::memory_order_release);
         }
@@ -348,7 +338,6 @@ namespace ngpp {
 
     int runCommand(const char* cmd) {
         if (!cmd || !*cmd) return 1;
-
         // mutable buffer, which we will convert to a character array
         // which can be passed to ngSpice_Command
         // Note: cmd.c_str() is a constant, cannot be passed to
@@ -401,18 +390,24 @@ namespace ngpp {
 
     // callback stubs
     extern "C" int sendChar(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
+#ifdef CALLBACK_DEBUG
         appendOutput(msg, callback::CHAR);
+#endif
         return 0;
     }
 
     extern "C" int sendStat(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
+#ifdef CALLBACK_DEBUG
         appendOutput(msg, callback::STAT);
+#endif
         return 0;
     }
 
     extern "C" int controlledExit(int status, bool, bool, int, void*) {
+#ifdef CALLBACK_DEBUG
         std::string s = "Exited with status " + std::to_string(status);
         appendOutput(s.c_str(), callback::CONTROLLED_EXIT);
+#endif
         g_initialized.store(false, std::memory_order_release);
         return 0;
     }
@@ -421,32 +416,39 @@ namespace ngpp {
         std::lock_guard<std::mutex> lk(g_dataMutex);
 
         const int n = vec->veccount;
+#ifdef CALLBACK_DEBUG
         std::string out = "veccount: " + std::to_string(n);
         out += "\nnum_cstructs: " + std::to_string(num_structs);
+#endif
         if (!g_storeComplex) {
             g_samples.reserve(g_samples.size() + n);
             for (int i=0; i < n; ++i) {
                 // store as real, real, real...
                 g_samples.push_back(vec->vecsa[i]->creal); // just real
+#ifdef CALLBACK_DEBUG
                 out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
+#endif
             }
         } else {
             g_samples.reserve(g_samples.size() + 2*n); // real and complex
             for (int i=0; i < n; ++i) {
                 // store samples as real, imag, real, imag, real, imag (hence why stride of 2 is necessary
                 g_samples.push_back(vec->vecsa[i]->creal);
-                out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
                 g_samples.push_back(vec->vecsa[i]->cimag);
+#ifdef CALLBACK_DEBUG
+                out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
                 out += ", " + std::to_string(g_samples.back());
+#endif
             }
         }
+#ifdef CALLBACK_DEBUG
         appendOutput(out.c_str(), callback::DATA);
+#endif
         return 0;
     }
 
     extern "C" int sendInitData(pvecinfoall info, int, void*) {
         std::lock_guard<std::mutex> lk(g_dataMutex);
-        std::string out;
 
         g_vecNames.clear();
         g_samples.clear();
@@ -456,7 +458,8 @@ namespace ngpp {
 
         g_storeComplex = analysisRequiresComplex(std::string(info->type));
         std::string requiresComplex = g_storeComplex ? "yes" : "no";
-
+#ifdef CALLBACK_DEBUG
+        std::string out;
         out += "name: " + std::string(info->name);
         out += "\ntitle: " + std::string(info->title);
         out += "\ndate: " + std::string(info->date);
@@ -464,11 +467,16 @@ namespace ngpp {
         out += "\nrequires complex: " + requiresComplex;
         out += "\nveccount: " + std::to_string(info->veccount);
         out += "\n\nvector names: ";
+#endif
         for (int i=0; i < g_vecCount; ++i) {
             g_vecNames.emplace_back(info->vecs[i]->vecname);
+#ifdef CALLBACK_DEBUG
             out += "\n" + std::string(info->vecs[i]->vecname);
+#endif
         }
+#ifdef CALLBACK_DEBUG
         appendOutput(out.c_str(), callback::INIT_DATA);
+#endif
         return 0;
     }
 
@@ -548,4 +556,51 @@ namespace ngpp {
         if (path && *path) setenv("SPICE_SCRIPTS", path, 1);
     }
 
+    SimPackage multirunProto(const std::string& netlist, const int& runs) {
+        SimPackage package;
+        package.number_of_runs = runs;
+        package.results.reserve(runs);
+        // these are specific to the prototype, will generalize later
+        package.param_names.emplace_back("__c1");
+        package.param_names.emplace_back("__r1");
+        package.param_names.emplace_back("__r2");
+        for (int k = 1; k <= runs; ++k) { // index starts at 1
+            RunResult result;
+            loadNetlist(netlist); // re-load circuit (fresh eval)
+            runCommand("reset");
+            //runCommand("op");
+            runCommand("ac dec 50 0.1 1meg");
+            runCommand("let __r1 = @r1[r]");
+            runCommand("let __r2 = @r2[r]");
+            runCommand("let __c1 = @c1[c]");
+            // names are common to the entire package but need at least one run to obtain
+            if (k == 1) {
+                package.signal_names = g_vecNames;
+            }
+            auto c1 = getVector("__c1");
+            auto r1 = getVector("__r1");
+            auto r2 = getVector("__r2");
+
+            auto scalar_or_zero = [](const std::vector<std::complex<double>>& v) -> std::complex<double> {
+                return v.empty() ? std::complex<double>(0.0, 0.0) : v[0];
+            };
+
+            result.param_values.clear();
+            result.param_values.reserve(package.param_names.size());
+            result.param_values.emplace_back(scalar_or_zero(c1));
+            result.param_values.emplace_back(scalar_or_zero(r1));
+            result.param_values.emplace_back(scalar_or_zero(r2));
+
+            auto frequency = getVector("frequency");
+            auto v2 = getVector("v(2)");
+            //result.signal_vectors.emplace_back(frequency);
+            result.signal_vectors.emplace_back(v2);
+            //const std::string out = getOutput();
+            result.this_run = k;
+            result.x_axis = frequency;
+            package.results.emplace_back(result);
+        }
+        return package;
+    }
 }
+
