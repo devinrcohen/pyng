@@ -4,6 +4,15 @@ set -euo pipefail
 # ---------------- USER SETTINGS ----------------
 PY_SCRIPT="${PY_SCRIPT:-smoketest_pyng.py}"      # default script to run
 BUILD_DIR="${BUILD_DIR:-cmake-build-pyng-conda}" # CMake build directory
+
+if [ ! -d "$BUILD_DIR" ]; then
+  echo "[INFO] Build dir missing; configuring: $BUILD_DIR"
+  cmake -S . -B "$BUILD_DIR" -G Ninja \
+    -DPython3_EXECUTABLE="$CONDA_PREFIX/bin/python" \
+    -DPython3_ROOT_DIR="$CONDA_PREFIX" \
+    -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
+fi
+
 TARGET="${TARGET:-pyng}"                         # CMake target to build
 # ----------------------------------------------
 
