@@ -204,9 +204,9 @@ def main() -> int:
     netlist = """
 VDIVIDER.cir
 V1 1 0 10 AC=1
-R1 1 2 R = {unif(3k,0.01)}
-C1 2 0 C = {unif(1u,0.24)}
-R2 2 0 R = {unif(7k,0.01)}
+R1 1 2 R = {unif(3k,0.05)}
+C1 2 0 C = {unif(1u,0.47)}
+R2 2 0 R = {unif(7k,0.05)}
 .end
 """
 
