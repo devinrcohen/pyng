@@ -12,26 +12,33 @@
 
 namespace py = pybind11;
 using ngpp::RunResult;
+using ngpp::cvector;
+using ngpp::dvector;
+using ngpp::cdouble;
+using ngpp::SpiceEngine;
+
 using namespace std;
 
+SpiceEngine engine;
 // Simple smoke-test function
 static int add_ints(int a, int b) {
-    ngpp::say_hello();
+    engine.say_hello();
     return a + b;
 }
 
 static void ngspice_init() {
-    ngpp::initNgspice();
-    std::cout << ngpp::getOutput() << std::endl;
+    engine = SpiceEngine();
+    engine.initNgspice();
+    std::cout << engine.getOutput() << std::endl;
 }
 
 static void run_command(const std::string& command) {
-    ngpp::runCommand(command.c_str());
-    std::cout << ngpp::getOutput() << std::endl;
+    engine.runCommand(command.c_str());
+    std::cout << engine.getOutput() << std::endl;
 }
 
 static int load_netlist(const std::string& netlist) {
-    return ngpp::loadNetlist(netlist.c_str());
+    return engine.loadNetlist(netlist.c_str());
 }
 
 // Example: return a dict (you’ll use this style for MC results)
@@ -74,11 +81,11 @@ static tuple<size_t /*num_of_runs*/,
             vector<string>/*signal_names*/,
             vector<size_t>/*run_indices*/,
             vector<size_t>/*num_datapoints_vec*/,
-            vector<vector<double>>/*param_values_per_run*/,
-            vector<vector<double>>/*x_axes*/,
+            vector<dvector>/*param_values_per_run*/,
+            vector<dvector>/*x_axes*/,
             string,/*x_label*/
-            vector<vector<complex<double>>>/*signal_vectors*/> multirun_proto(const string& netlist, const int& runs) {
-    ngpp::SimPackage package = ngpp::multirunProto(netlist, runs);
+            vector<cvector>/*signal_vectors*/> multirun_proto(const string& netlist, const int& runs) {
+    ngpp::SimPackage package = engine.multirunProto(netlist, runs);
     // unpack results to send to python
     // common-to-package
     vector<string> param_names = package.param_names;
@@ -89,11 +96,11 @@ static tuple<size_t /*num_of_runs*/,
     run_indices.reserve(package.number_of_runs);
     vector<size_t> num_datapoints_vec;
     num_datapoints_vec.reserve(package.number_of_runs);
-    vector<vector<double>> param_values_per_run;
+    vector<dvector> param_values_per_run;
     param_values_per_run.reserve(package.number_of_runs);
-    vector<vector<complex<double>>> signal_vectors;
+    vector<cvector> signal_vectors;
     signal_vectors.reserve(package.number_of_runs);
-    vector<vector<double>> x_axes;
+    vector<dvector> x_axes;
     x_axes.reserve(package.number_of_runs);
 
     for (const auto& result : package.results) {
@@ -104,7 +111,7 @@ static tuple<size_t /*num_of_runs*/,
         num_datapoints_vec.emplace_back(result.x_axis.size());
         // param and x-axis values to real
         auto get_real_vector = [](const auto& comp_vec) {
-            vector<double> real_vec;
+            dvector real_vec;
             real_vec.reserve(comp_vec.size());
             for (const auto& element : comp_vec) {
                 real_vec.emplace_back(element.real());

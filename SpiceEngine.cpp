@@ -11,6 +11,104 @@ extern "C" {
 #include <ngspice/sharedspice.h>
 }
 
+// callback stubs
+extern "C" int sendChar(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
+#ifdef CALLBACK_DEBUG
+    appendOutput(msg, callback::CHAR);
+#endif
+    return 0;
+}
+
+extern "C" int sendStat(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
+#ifdef CALLBACK_DEBUG
+    appendOutput(msg, callback::STAT);
+#endif
+    return 0;
+}
+
+extern "C" int controlledExit(int status, bool, bool, int, void*) {
+#ifdef CALLBACK_DEBUG
+    std::string s = "Exited with status " + std::to_string(status);
+    appendOutput(s.c_str(), callback::CONTROLLED_EXIT);
+#endif
+    ngpp::g_initialized.store(false, std::memory_order_release);
+    return 0;
+}
+
+extern "C" int sendData(pvecvaluesall vec, int num_structs, int, void*) {
+    std::lock_guard<std::mutex> lk(ngpp::g_dataMutex);
+
+    const int n = vec->veccount;
+#ifdef CALLBACK_DEBUG
+    std::string out = "veccount: " + std::to_string(n);
+    out += "\nnum_cstructs: " + std::to_string(num_structs);
+#endif
+    if (!ngpp::g_storeComplex) {
+        ngpp::g_samples.reserve(ngpp::g_samples.size() + n);
+        for (int i=0; i < n; ++i) {
+            // store as real, real, real...
+            ngpp::g_samples.push_back(vec->vecsa[i]->creal); // just real
+#ifdef CALLBACK_DEBUG
+            out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
+#endif
+        }
+    } else {
+        ngpp::g_samples.reserve(ngpp::g_samples.size() + 2*n); // real and complex
+        for (int i=0; i < n; ++i) {
+            // store samples as real, imag, real, imag, real, imag (hence why stride of 2 is necessary
+            ngpp::g_samples.push_back(vec->vecsa[i]->creal);
+            ngpp::g_samples.push_back(vec->vecsa[i]->cimag);
+#ifdef CALLBACK_DEBUG
+            out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
+            out += ", " + std::to_string(g_samples.back());
+#endif
+        }
+    }
+#ifdef CALLBACK_DEBUG
+    appendOutput(out.c_str(), callback::DATA);
+#endif
+    return 0;
+}
+
+extern "C" int sendInitData(pvecinfoall info, int, void*) {
+    std::lock_guard<std::mutex> lk(ngpp::g_dataMutex);
+
+    ngpp::g_vecNames.clear();
+    ngpp::g_samples.clear();
+
+    ngpp::g_vecCount = info->veccount;
+    ngpp::g_vecNames.reserve(ngpp::g_vecCount);
+
+    ngpp::g_storeComplex = ngpp::analysisRequiresComplex(std::string(info->type));
+    std::string requiresComplex = ngpp::g_storeComplex ? "yes" : "no";
+#ifdef CALLBACK_DEBUG
+    std::string out;
+    out += "name: " + std::string(info->name);
+    out += "\ntitle: " + std::string(info->title);
+    out += "\ndate: " + std::string(info->date);
+    out += "\ntype: " + std::string(info->type);
+    out += "\nrequires complex: " + requiresComplex;
+    out += "\nveccount: " + std::to_string(info->veccount);
+    out += "\n\nvector names: ";
+#endif
+    for (int i=0; i < ngpp::g_vecCount; ++i) {
+        ngpp::g_vecNames.emplace_back(info->vecs[i]->vecname);
+#ifdef CALLBACK_DEBUG
+        out += "\n" + std::string(info->vecs[i]->vecname);
+#endif
+    }
+#ifdef CALLBACK_DEBUG
+    appendOutput(out.c_str(), callback::INIT_DATA);
+#endif
+    return 0;
+}
+
+extern "C" int bgThreadRunning(bool running, int, void*) {
+    ngpp::SpiceEngine::appendOutput(running ? "running" : "not running", ngpp::callback::BG);
+    ngpp::SpiceEngine::setBgRunning(running);
+    return 0;
+}
+
 using enum ngpp::callback;
 using enum ngpp::CpxComponent;
 
@@ -28,14 +126,14 @@ std::vector<char*> buildDeck(const std::string & netlistStr) {
         std::stringstream ss(netlistStr);
         std::string line;
         while (std::getline(ss, line)) {
-            line = normalizeLine(line);
+            line = ngpp::normalizeLine(line);
 
             // Skip truly blank lines
             if (line.find_first_not_of(" \t") == std::string::npos) {
                 continue;
             }
 
-            if (lineContainsDotEnd(line)) {
+            if (ngpp::lineContainsDotEnd(line)) {
                 hasEnd = true;
             }
 
@@ -122,44 +220,114 @@ std::string normalizeLine(std::string s)
 
 
 namespace ngpp {
-    // callbacks
-    extern "C" int sendChar(char* msg, int, void*);
-    extern "C" int sendStat(char* msg, int, void*);
-    extern "C" int controlledExit(int status, bool, bool, int, void*);
-    extern "C" int sendData(pvecvaluesall vec, int, int, void*);
-    extern "C" int sendInitData(pvecinfoall info, int, void*);
-    extern "C" int bgThreadRunning(bool running, int, void*);
+    std::vector<char*> buildDeck(const std::string & netlistStr) {
+    // Build a strict, NULL-terminated deck for ngSpice_Circ:
+    // - normalized whitespace
+    // - no blank lines
+    // - each line ends with '\n'
+    std::vector<std::string> lines;
+    lines.reserve(64);
 
-    static void setBgRunning(bool running);
-    static void waitBgDone();
-    static void clearOutput();
+    bool hasEnd = false;
+    {
+        std::stringstream ss(netlistStr);
+        std::string line;
+        while (std::getline(ss, line)) {
+            line = ngpp::normalizeLine(line);
 
-    static std::string takeOutputSnapshot();
-    static std::atomic<bool> g_initialized{false};
-    static std::atomic<bool> g_hasLoadedCircuit{false};
+            // Skip truly blank lines
+            if (line.find_first_not_of(" \t") == std::string::npos) {
+                continue;
+            }
 
-    // Mutex for ngspice calls (serialize init/run)
-    static std::mutex g_spiceMutex;
+            if (ngpp::lineContainsDotEnd(line)) {
+                hasEnd = true;
+            }
 
-    // Mutex for output aggregation (callbacks may come asynchronously)
-    static std::mutex g_outMutex;
-    static std::string g_output;
+            // Ensure newline termination for robustness
+            if (line.empty() || line.back() != '\n') {
+                line.push_back('\n');
+            }
 
-    // Mutex for data aggregation
-    static std::mutex g_dataMutex;
-    static std::vector<std::string> g_vecNames;
-    static int g_vecCount = 0;
+            lines.push_back(line);
+        }
+    }
 
-    // Row-major samples:
-    //   stride=1 (real):   [s0v0, s0v1, ... s0vN-1, s1v0, ...]
-    //   stride=2 (complex):[s0v0R, s0v0I, s0v1R, s0v1I, ...]
-    static std::vector<double> g_samples;
-    static bool g_storeComplex = false;
+    if (lines.empty()) {
+        lines.emplace_back("untitled\n");
+    }
 
-    // Background thread running flag (for analyses that execute async inside ngspice)
-    static std::mutex g_bgMutex;
-    static std::condition_variable g_bgCv;
-    static std::atomic<bool> g_bgRunning{false};
+    if (!hasEnd) {
+        lines.emplace_back(".end\n");
+    }
+
+    // Convert to char** (NULL-terminated)
+    std::vector<char*> cLines;
+    cLines.reserve(lines.size() + 1);
+
+    for (const auto& l : lines) {
+        cLines.push_back(::strdup(l.c_str()));
+    }
+    cLines.push_back(nullptr);
+    return cLines;
+}
+
+    void freeDeck(std::vector<char*>& deck) {
+        // must free each item of deck
+        for (char* p : deck) {
+            if (p) ::free(p);
+        }
+        deck.clear();
+    }
+
+    bool lineContainsDotEnd(const std::string & line) {
+        // case-insensitive search for ".end"
+        std::string low;
+        low.reserve(line.size());
+        for (unsigned char ch : line) {
+            low.push_back(static_cast<char>(std::tolower(ch)));
+        }
+        return (low.find(".end") != std::string::npos);
+    }
+
+    int loadCircuitKeepDeck(const std::string& netlistStr, std::vector<char*>& loadedDeck) {
+        freeDeck(loadedDeck);
+        loadedDeck = buildDeck(netlistStr);
+        if (loadedDeck.empty()) return 1;
+        return ngSpice_Circ(loadedDeck.data());
+    }
+
+    std::string normalizeLine(std::string s)
+    {
+        // Strip CR (Windows line endings)
+        if (!s.empty() && s.back() == '\r') {
+            s.pop_back();
+        }
+
+        // Convert UTF-8 NBSP (0xC2 0xA0) to normal space.
+        // ngspice may NGSP treat it as an illegal token separator.
+        for (size_t i = 0; i + 1 < s.size(); ) {
+            auto c0 = static_cast<unsigned char>(s[i]);
+            auto c1 = static_cast<unsigned char>(s[i + 1]);
+            if (c0 == 0xC2 && c1 == 0xA0) {
+                s.replace(i, 2, " ");
+                i += 1;
+            } else {
+                i += 1;
+            }
+        }
+
+        // Trim right-side spaces/tabs
+        while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) {
+            s.pop_back();
+        }
+
+        return s;
+    }
+
+    SpiceEngine::SpiceEngine() {
+        initNgspice();
+    }
 
     std::vector<char*> loadedDeck;
 
@@ -176,7 +344,7 @@ namespace ngpp {
     }
 
     // updates the static g_output string (guarded by a mutex)
-    void appendOutput(const char* s, const callback cb)
+    void SpiceEngine::appendOutput(const char* s, const callback cb)
     {
         if (!s) return;
         std::string label;
@@ -212,22 +380,22 @@ namespace ngpp {
         }
     }
 
-    int clearCommand() {
+    int SpiceEngine::clearCommand() {
         std::lock_guard<std::mutex> lk(g_outMutex);
         return ngSpice_Command(nullptr);
     }
 
-    int getComplexStride() {
+    int SpiceEngine::getComplexStride() {
         return g_storeComplex ? 2 : 1;
     }
 
-    std::string getOutput() {
+    std::string SpiceEngine::getOutput() {
         std::string out = takeOutputSnapshot();
         clearOutput();
         return out;
     }
 
-    std::vector<std::string> getVecNames() // do we even need this?
+    std::vector<std::string> SpiceEngine::getVecNames() // do we even need this?
     {
         std::lock_guard<std::mutex> lk(g_dataMutex);
         std::vector<std::string> vecNames;
@@ -238,8 +406,8 @@ namespace ngpp {
         return vecNames;
     }
 
-    std::vector<std::complex<double>> getVector(const char *name) {
-        std::vector<cdouble> out;
+    cvector SpiceEngine::getVector(const char *name) {
+        cvector out;
         pvector_info vecInfo = ngGet_Vec_Info(const_cast<char*>(name));
         auto n = static_cast<size_t>(vecInfo->v_length);
         out.reserve(n);
@@ -255,7 +423,7 @@ namespace ngpp {
         return out;
     }
 
-    void initNgspice() {
+    void SpiceEngine::initNgspice() {
 #ifdef CALLBACK_DEBUG
         const char* p = getenv("SPICE_SCRIPTS");
         appendOutput(p ? p : "SPICE_SCRIPTS is NOT set", callback::STAT);
@@ -275,12 +443,12 @@ namespace ngpp {
         }
     }
 
-    int loadNetlist(const char * netlist) {
+    int SpiceEngine::loadNetlist(const char * netlist) {
         std::string nl = netlist;
         return loadNetlist(nl/*, engine*/);
     }
 
-    int loadNetlist(const std::string& netlist) {
+    int SpiceEngine::loadNetlist(const std::string& netlist) {
         std::lock_guard<std::mutex> lk(g_spiceMutex);
         std::vector<std::string> tokens;
         std::string token;
@@ -294,7 +462,7 @@ namespace ngpp {
         return rc;
     }
 
-    std::string runAnalysis(const char * netlist, const char * analysisCmd) {
+    std::string SpiceEngine::runAnalysis(const char * netlist, const char * analysisCmd) {
         std::lock_guard<std::mutex> lk(g_spiceMutex);
         if(!g_initialized.load(std::memory_order_acquire)) {
             return "Error: ngspice not initialized.\n";
@@ -336,7 +504,7 @@ namespace ngpp {
         return takeOutputSnapshot();
     }
 
-    int runCommand(const char* cmd) {
+    int SpiceEngine::runCommand(const char* cmd) {
         if (!cmd || !*cmd) return 1;
         // mutable buffer, which we will convert to a character array
         // which can be passed to ngSpice_Command
@@ -349,11 +517,11 @@ namespace ngpp {
         return ngSpice_Command(buf.data()); // char*
     }
 
-    void say_hello() {
+    void SpiceEngine::say_hello() {
         std::cout << "Hello from C++\n";
     }
 
-    StabilityMargins seekMargins(const cvector& H,
+    StabilityMargins SpiceEngine::seekMargins(const cvector& H,
         const cvector& frequency) {
         StabilityMargins margins;
         size_t len = H.size();
@@ -379,8 +547,8 @@ namespace ngpp {
         return margins;
     }
 
-    std::vector<double> takeSamples() {
-        std::vector<double> arr;
+    dvector SpiceEngine::takeSamples() {
+        dvector arr;
         {
             std::lock_guard<std::mutex> lk(g_dataMutex);
             arr.swap(g_samples);
@@ -388,105 +556,9 @@ namespace ngpp {
         return arr;
     }
 
-    // callback stubs
-    extern "C" int sendChar(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
-#ifdef CALLBACK_DEBUG
-        appendOutput(msg, callback::CHAR);
-#endif
-        return 0;
-    }
 
-    extern "C" int sendStat(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
-#ifdef CALLBACK_DEBUG
-        appendOutput(msg, callback::STAT);
-#endif
-        return 0;
-    }
 
-    extern "C" int controlledExit(int status, bool, bool, int, void*) {
-#ifdef CALLBACK_DEBUG
-        std::string s = "Exited with status " + std::to_string(status);
-        appendOutput(s.c_str(), callback::CONTROLLED_EXIT);
-#endif
-        g_initialized.store(false, std::memory_order_release);
-        return 0;
-    }
-
-    extern "C" int sendData(pvecvaluesall vec, int num_structs, int, void*) {
-        std::lock_guard<std::mutex> lk(g_dataMutex);
-
-        const int n = vec->veccount;
-#ifdef CALLBACK_DEBUG
-        std::string out = "veccount: " + std::to_string(n);
-        out += "\nnum_cstructs: " + std::to_string(num_structs);
-#endif
-        if (!g_storeComplex) {
-            g_samples.reserve(g_samples.size() + n);
-            for (int i=0; i < n; ++i) {
-                // store as real, real, real...
-                g_samples.push_back(vec->vecsa[i]->creal); // just real
-#ifdef CALLBACK_DEBUG
-                out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
-#endif
-            }
-        } else {
-            g_samples.reserve(g_samples.size() + 2*n); // real and complex
-            for (int i=0; i < n; ++i) {
-                // store samples as real, imag, real, imag, real, imag (hence why stride of 2 is necessary
-                g_samples.push_back(vec->vecsa[i]->creal);
-                g_samples.push_back(vec->vecsa[i]->cimag);
-#ifdef CALLBACK_DEBUG
-                out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
-                out += ", " + std::to_string(g_samples.back());
-#endif
-            }
-        }
-#ifdef CALLBACK_DEBUG
-        appendOutput(out.c_str(), callback::DATA);
-#endif
-        return 0;
-    }
-
-    extern "C" int sendInitData(pvecinfoall info, int, void*) {
-        std::lock_guard<std::mutex> lk(g_dataMutex);
-
-        g_vecNames.clear();
-        g_samples.clear();
-
-        g_vecCount = info->veccount;
-        g_vecNames.reserve(g_vecCount);
-
-        g_storeComplex = analysisRequiresComplex(std::string(info->type));
-        std::string requiresComplex = g_storeComplex ? "yes" : "no";
-#ifdef CALLBACK_DEBUG
-        std::string out;
-        out += "name: " + std::string(info->name);
-        out += "\ntitle: " + std::string(info->title);
-        out += "\ndate: " + std::string(info->date);
-        out += "\ntype: " + std::string(info->type);
-        out += "\nrequires complex: " + requiresComplex;
-        out += "\nveccount: " + std::to_string(info->veccount);
-        out += "\n\nvector names: ";
-#endif
-        for (int i=0; i < g_vecCount; ++i) {
-            g_vecNames.emplace_back(info->vecs[i]->vecname);
-#ifdef CALLBACK_DEBUG
-            out += "\n" + std::string(info->vecs[i]->vecname);
-#endif
-        }
-#ifdef CALLBACK_DEBUG
-        appendOutput(out.c_str(), callback::INIT_DATA);
-#endif
-        return 0;
-    }
-
-    extern "C" int bgThreadRunning(bool running, int, void*) {
-        appendOutput(running ? "running" : "not running", callback::BG);
-        setBgRunning(running);
-        return 0;
-    }
-
-    static void setBgRunning(bool running)
+    void SpiceEngine::setBgRunning(bool running)
     {
         {
             std::lock_guard<std::mutex> lk(g_bgMutex);
@@ -495,26 +567,26 @@ namespace ngpp {
         g_bgCv.notify_all();
     }
 
-    static void waitBgDone()
+    void SpiceEngine::waitBgDone()
     {
         std::unique_lock<std::mutex> lk(g_bgMutex);
         g_bgCv.wait(lk, [] { return !g_bgRunning.load(std::memory_order_acquire); });
     }
 
-    static void clearOutput()
+    void SpiceEngine::clearOutput()
     {
         std::lock_guard<std::mutex> lk(g_outMutex);
         g_output.clear();
     }
 
-    static std::string takeOutputSnapshot()
+    std::string SpiceEngine::takeOutputSnapshot()
     {
         // returns the g_output string (guarded by a mutex)
         std::lock_guard<std::mutex> lk(g_outMutex);
         return g_output;
     }
 
-    static int validateDeck(char** deck) {
+    int validateDeck(char** deck) {
         if(!*deck) return 1;
         for (size_t i = 0; deck[i]; ++i) {
             const char *s = deck[i];
@@ -528,7 +600,7 @@ namespace ngpp {
         return 0;
     }
 
-    int runCirc(char** deck) {
+    int SpiceEngine::runCirc(char** deck) {
         if (!deck || !*deck) return 1;
         int v = validateDeck(deck);
         std::string diagnostic = "Error " + std::to_string(v) + ": ";
@@ -552,11 +624,11 @@ namespace ngpp {
         return ngSpice_Circ(deck);
     }
 
-    void setSpiceScriptsPath(const char* path) {
+    void SpiceEngine::setSpiceScriptsPath(const char* path) {
         if (path && *path) setenv("SPICE_SCRIPTS", path, 1);
     }
 
-    SimPackage multirunProto(const std::string& netlist, const int& runs) {
+    SimPackage SpiceEngine::multirunProto(const std::string& netlist, const int& runs) {
         SimPackage package;
         package.number_of_runs = runs;
         package.results.reserve(runs);
@@ -585,7 +657,7 @@ namespace ngpp {
             auto r1 = getVector("__r1");
             auto r2 = getVector("__r2");
 
-            auto scalar_or_zero = [](const std::vector<std::complex<double>>& v) -> std::complex<double> {
+            auto scalar_or_zero = [](const cvector& v) -> cdouble {
                 return v.empty() ? std::complex<double>(0.0, 0.0) : v[0];
             };
 
