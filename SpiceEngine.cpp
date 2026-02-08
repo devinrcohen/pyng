@@ -11,17 +11,20 @@ extern "C" {
 #include <ngspice/sharedspice.h>
 }
 
+using ngpp::callback;
+using ngpp::SpiceEngine;
+
 // callback stubs
 extern "C" int sendChar(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
 #ifdef CALLBACK_DEBUG
-    appendOutput(msg, callback::CHAR);
+    SpiceEngine::appendOutput(msg, ngpp::callback::CHAR);
 #endif
     return 0;
 }
 
 extern "C" int sendStat(char* msg /*NOLINT(readability-non-const-parameter)*/, int, void*) {
 #ifdef CALLBACK_DEBUG
-    appendOutput(msg, callback::STAT);
+    SpiceEngine::appendOutput(msg, callback::STAT);
 #endif
     return 0;
 }
@@ -29,7 +32,7 @@ extern "C" int sendStat(char* msg /*NOLINT(readability-non-const-parameter)*/, i
 extern "C" int controlledExit(int status, bool, bool, int, void*) {
 #ifdef CALLBACK_DEBUG
     std::string s = "Exited with status " + std::to_string(status);
-    appendOutput(s.c_str(), callback::CONTROLLED_EXIT);
+    SpiceEngine::appendOutput(s.c_str(), callback::CONTROLLED_EXIT);
 #endif
     ngpp::g_initialized.store(false, std::memory_order_release);
     return 0;
@@ -49,7 +52,7 @@ extern "C" int sendData(pvecvaluesall vec, int num_structs, int, void*) {
             // store as real, real, real...
             ngpp::g_samples.push_back(vec->vecsa[i]->creal); // just real
 #ifdef CALLBACK_DEBUG
-            out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
+            out += "\n["+std::to_string(i)+"] " + std::to_string(ngpp::g_samples.back());
 #endif
         }
     } else {
@@ -59,13 +62,13 @@ extern "C" int sendData(pvecvaluesall vec, int num_structs, int, void*) {
             ngpp::g_samples.push_back(vec->vecsa[i]->creal);
             ngpp::g_samples.push_back(vec->vecsa[i]->cimag);
 #ifdef CALLBACK_DEBUG
-            out += "\n["+std::to_string(i)+"] " + std::to_string(g_samples.back());
-            out += ", " + std::to_string(g_samples.back());
+            out += "\n["+std::to_string(i)+"] " + std::to_string(ngpp::g_samples.back());
+            out += ", " + std::to_string(ngpp::g_samples.back());
 #endif
         }
     }
 #ifdef CALLBACK_DEBUG
-    appendOutput(out.c_str(), callback::DATA);
+    SpiceEngine::appendOutput(out.c_str(), callback::DATA);
 #endif
     return 0;
 }
@@ -98,7 +101,7 @@ extern "C" int sendInitData(pvecinfoall info, int, void*) {
 #endif
     }
 #ifdef CALLBACK_DEBUG
-    appendOutput(out.c_str(), callback::INIT_DATA);
+    SpiceEngine::appendOutput(out.c_str(), callback::INIT_DATA);
 #endif
     return 0;
 }
@@ -220,6 +223,9 @@ std::string normalizeLine(std::string s)
 
 
 namespace ngpp {
+    int  g_vecCount = 0;
+    bool g_storeComplex = false;
+
     std::vector<char*> buildDeck(const std::string & netlistStr) {
     // Build a strict, NULL-terminated deck for ngSpice_Circ:
     // - normalized whitespace
@@ -406,6 +412,7 @@ namespace ngpp {
         return vecNames;
     }
 
+    /*
     cvector SpiceEngine::getVector(const char *name) {
         cvector out;
         pvector_info vecInfo = ngGet_Vec_Info(const_cast<char*>(name));
@@ -420,6 +427,31 @@ namespace ngpp {
                 out.emplace_back(vecInfo->v_realdata[i],0.0);
             }
         }
+        return out;
+    }
+    */
+    cvector SpiceEngine::getVector(const char *name) {
+        cvector out;
+
+        if (!name || !*name) return out;
+
+        pvector_info vecInfo = ngGet_Vec_Info(const_cast<char*>(name));
+        if (!vecInfo) return out;
+
+        const size_t n = static_cast<size_t>(vecInfo->v_length);
+        out.reserve(n);
+
+        if (vecInfo->v_compdata) {
+            for (size_t i = 0; i < n; ++i) {
+                out.emplace_back(vecInfo->v_compdata[i].cx_real,
+                                 vecInfo->v_compdata[i].cx_imag);
+            }
+        } else if (vecInfo->v_realdata) {
+            for (size_t i = 0; i < n; ++i) {
+                out.emplace_back(vecInfo->v_realdata[i], 0.0);
+            }
+        }
+
         return out;
     }
 
@@ -670,6 +702,67 @@ namespace ngpp {
             auto frequency = getVector("frequency");
             auto v1 = getVector("v(1)");
             auto v2 = getVector("v(2)");
+            //result.signal_vectors.emplace_back(frequency);
+            result.signal_vectors.emplace_back(v1);
+            result.signal_vectors.emplace_back(v2);
+            //const std::string out = getOutput();
+            result.this_run = k;
+            result.x_axis = frequency;
+            package.results.emplace_back(result);
+        }
+        return package;
+    }
+
+    SimPackage SpiceEngine::multirunProto2(const std::string& netlist, const int& runs) {
+        SimPackage package;
+        package.number_of_runs = runs;
+        package.results.reserve(runs);
+        // these are specific to the prototype, will generalize later
+        package.param_names.emplace_back("__c1");
+        package.param_names.emplace_back("__r1");
+        package.param_names.emplace_back("__r2");
+        package.param_names.emplace_back("__r4");
+        package.param_names.emplace_back("__r6");
+        package.x_label = "frequency";
+        for (int k = 1; k <= runs; ++k) { // index starts at 1
+            RunResult result;
+            loadNetlist(netlist); // re-load circuit (fresh eval)
+            runCommand("reset");
+            //runCommand("op");
+            runCommand("ac dec 50 0.1 100meg");
+            runCommand("let __c1 = @c1[c]");
+            runCommand("let __r1 = @r1[r]");
+            runCommand("let __r2 = @r2[r]");
+            runCommand("let __r4 = @r4[r]");
+            runCommand("let __r6 = @r6[r]");
+            // names are common to the entire package but need at least one run to obtain
+            if (k == 1) {
+                //package.signal_names = g_vecNames; // includes independent variable
+                package.signal_names.clear();
+                package.signal_names.emplace_back("v(x1n)");
+                package.signal_names.emplace_back("v(x1nn)");
+            }
+            auto c1 = getVector("__c1");
+            auto r1 = getVector("__r1");
+            auto r2 = getVector("__r2");
+            auto r4 = getVector("__r4");
+            auto r6 = getVector("__r6");
+
+            auto scalar_or_zero = [](const cvector& v) -> cdouble {
+                return v.empty() ? std::complex<double>(0.0, 0.0) : v[0];
+            };
+
+            result.param_values.clear();
+            result.param_values.reserve(package.param_names.size());
+            result.param_values.emplace_back(scalar_or_zero(c1));
+            result.param_values.emplace_back(scalar_or_zero(r1));
+            result.param_values.emplace_back(scalar_or_zero(r2));
+            result.param_values.emplace_back(scalar_or_zero(r4));
+            result.param_values.emplace_back(scalar_or_zero(r6));
+
+            auto frequency = getVector("frequency");
+            auto v1 = getVector("v(x1n)");
+            auto v2 = getVector("v(x1nn)");
             //result.signal_vectors.emplace_back(frequency);
             result.signal_vectors.emplace_back(v1);
             result.signal_vectors.emplace_back(v2);

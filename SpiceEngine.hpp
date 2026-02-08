@@ -1,6 +1,7 @@
 #pragma once
 
-//#define CALLBACK_DEBUG true
+#define CALLBACK_DEBUG true
+//#define DEBUG_USE_RC true
 
 #include <string>
 #include <vector>
@@ -79,10 +80,11 @@ namespace ngpp {
     // Mutex for data aggregation
     static std::mutex g_dataMutex;
     static std::vector<std::string> g_vecNames;
-    static int g_vecCount = 0;
-
+    // static int g_vecCount = 0;
+    extern int g_vecCount;
     static std::vector<double> g_samples;
-    static bool g_storeComplex = false;
+    // static bool g_storeComplex = false;
+    extern bool g_storeComplex;
 
     // Background thread running flag (for analyses that execute async inside ngspice)
     static std::mutex g_bgMutex;
@@ -100,6 +102,7 @@ namespace ngpp {
         int                                 runCommand(const char*);
         void                                say_hello();
         SimPackage                          multirunProto(const std::string&, const int&);
+        SimPackage                          multirunProto2(const std::string&, const int&);
         static void                         appendOutput(const char* s, callback cb);
         static void                         setBgRunning(bool running);
         static void waitBgDone();

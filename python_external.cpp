@@ -85,7 +85,12 @@ static tuple<size_t /*num_of_runs*/,
             vector<dvector>/*x_axes*/,
             string,/*x_label*/
             vector<cvector>/*signal_vectors*/> multirun_proto(const string& netlist, const int& runs) {
+#ifdef DEBUG_USE_RC
     ngpp::SimPackage package = engine.multirunProto(netlist, runs);
+#else
+    ngpp::SimPackage package = engine.multirunProto2(netlist, runs);
+
+#endif
     // unpack results to send to python
     // common-to-package
     vector<string> param_names = package.param_names;
