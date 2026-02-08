@@ -201,15 +201,63 @@ def deep_getsizeof(o, seen=None):
 # Main
 # -----------------------------------------------------------------------------
 def main() -> int:
+#     netlist = """
+# VDIVIDER.cir
+# V1 1 0 10 AC=1
+# R1 1 2 R = {unif(3k,0.05)}
+# C1 2 0 C = {unif(1u,0.47)}
+# R2 2 0 R = {unif(7k,0.05)}
+# .end
+# """
     netlist = """
-VDIVIDER.cir
-V1 1 0 10 AC=1
-R1 1 2 R = {unif(3k,0.05)}
-C1 2 0 C = {unif(1u,0.47)}
-R2 2 0 R = {unif(7k,0.05)}
+ADCREF.cir
+X1 N003 x1n x1out ISL70444_FREQ
+R1 Vout x1nn {unif(4.99k,0.05)}
+R2 0 x1nn {unif(4.99k,0.05)}
+R3 x1out N004 100
+R4 N005 Vout {unif(10,0.024)}
+R5 N001 N002 33.2
+V1 N001 0 15
+V2 x1n x1nn 0 AC 1
+Q1 N002 N004 N005 0 NPN
+V3 N003 0 2.5
+R6 x1out N006 {pow(10, aunif(3,3))}
+C1 N006 x1nn {pow(10, aunif(-7,2.5))}
+*R6 x1out N006 {unif(50k,0.99)}
+*C1 N006 x1nn {unif(1u,0.99999)}
+C2 Vout 0 10u
+*I1 Vout 0 10m
+*I2 Vout 0 PULSE(0 10m 1m 10u 10u 50m)
+
+* block symbol definitions
+.subckt ISL70444_FREQ 1 2 3
+*.param f1=1
+*.param f2=19meg
+*.param AOL=1000000
+*.param rout=10 rin=1G
+R1 N001 0 1
+*C1 N001 0 {1/(2*3.14159*f1)}
+C1 N001 0 0.159154943
+R2 N002 0 1
+*C2 N002 0 {1/(2*3.14159*f2)}
+C2 N002 0 0.000000008
+*G1 0 N001 1 2 {AOL}
+G1 0 N001 1 2 1000000
+G2 0 N002 N001 0 1
+*R3 1 2 {rin}
+R3 1 2 1G
+R4 N003 0 1
+*C3 N003 0 {1/(2*3.14159*f2)}
+C3 N003 0 0.000000008
+G3 0 N003 N002 0 1
+E1 N004 0 N003 0 1
+*R5 3 N004 {rout}
+R5 3 N004 10
+.ends ISL70444_FREQ
+
+.model NPN NPN
 .end
 """
-
     pyng.ngspice_init()
 
     # This is your C++ hard-coded prototype entry point:
@@ -223,8 +271,8 @@ R2 2 0 R = {unif(7k,0.05)}
     sig_names = pkg["signal_names"]
     sig_names_l = [s.lower() for s in sig_names]
 
-    out_name = "v(2)"
-    in_name = "v(1)"
+    out_name = "v(x1nn)"
+    in_name = "v(x1n)"
 
     try:
         j_out = sig_names_l.index(out_name.lower())
@@ -237,11 +285,14 @@ R2 2 0 R = {unif(7k,0.05)}
     Vin  = pkg["signals"][:, j_in, :]   # (n_runs, n_pts)
 
     H = Vout / Vin
+
     mag_db = 20 * np.log10(np.abs(H))
+    ph_deg = np.angle(H, True)
 
     plt.figure()
     for i in range(pkg["n_runs"]):
         plt.semilogx(x[i], mag_db[i])
+        plt.semilogx(x[i], ph_deg[i])
     plt.xlabel(pkg["x_label"])
     plt.ylabel("|Vout/Vin| (dB)")
     plt.title("H = v(2)/v(1) overlay (all runs)")
