@@ -10,6 +10,12 @@ from pickletools import uint8
 import numpy as np
 import matplotlib.pyplot as plt
 
+def sanitize_netlist(s: str) -> str:
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    s = s.replace("µ", "u")          # micro symbol → ASCII u
+    if not s.endswith("\n"):
+        s += "\n"
+    return s
 def unpack_multirun_tuple(sim_results):
     n_runs, param_names, signal_names, run_ids, npts, param_vals, signals = sim_results
 
@@ -67,18 +73,68 @@ def main() -> int:
     build_dir = os.environ.get("PYNG_BUILD_DIR", "cmake-build-pyng-conda")
     build_dir = os.path.abspath(build_dir)
 
+#     netlist = """
+# VDIVIDER.cir
+# V1 1 0 10 AC=1
+# *R1 1 2 R = {gauss(3k,0.1,10)}
+# R1 1 2 R = {unif(3k,0.01)}
+# C1 2 0 C = {unif(1u,0.10)}
+# *R2 2 0 R = {gauss(7k,0.1,10)}
+# R2 2 0 R = {unif(7k,0.01)}
+# *R2 2 0 1e12
+# .end
+# """
+
     netlist = """
-VDIVIDER.cir
-V1 1 0 10 AC=1
-*R1 1 2 R = {gauss(3k,0.1,10)}
-R1 1 2 R = {unif(3k,0.01)}
-C1 2 0 C = {unif(1u,0.10)}
-*R2 2 0 R = {gauss(7k,0.1,10)}
-R2 2 0 R = {unif(7k,0.01)}
-*R2 2 0 1e12
+ADCREF.cir
+X1 N003 x1n x1out ISL70444_FREQ
+R1 Vout x1nn {unif(4.99k,0.05)}
+R2 0 x1nn {unif(4.99k,0.05)}
+R3 x1out N004 100
+R4 N005 Vout {unif(10,0.024)}
+R5 N001 N002 33.2
+V1 N001 0 15
+V2 x1n x1nn 0 AC 1
+Q1 N002 N004 N005 0 NPN
+V3 N003 0 2.5
+*R6 x1out N006 {pow(10, unif(3,1))}
+*C1 N006 x1nn {pow(10, unif(-9,0.44))}
+R6 x1out N006 {unif(50k,0.99)}
+C1 N006 x1nn {unif(1u,0.99999)}
+C2 Vout 0 10u
+*I1 Vout 0 10m
+*I2 Vout 0 PULSE(0 10m 1m 10u 10u 50m)
+
+* block symbol definitions
+.subckt ISL70444_FREQ 1 2 3
+*.param f1=1
+*.param f2=19meg
+*.param AOL=1000000
+*.param rout=10 rin=1G
+R1 N001 0 1
+*C1 N001 0 {1/(2*3.14159*f1)}
+C1 N001 0 0.159154943
+R2 N002 0 1
+*C2 N002 0 {1/(2*3.14159*f2)}
+C2 N002 0 0.000000008
+*G1 0 N001 1 2 {AOL}
+G1 0 N001 1 2 1000000
+G2 0 N002 N001 0 1
+*R3 1 2 {rin}
+R3 1 2 1G
+R4 N003 0 1
+*C3 N003 0 {1/(2*3.14159*f2)}
+C3 N003 0 0.000000008
+G3 0 N003 N002 0 1
+E1 N004 0 N003 0 1
+*R5 3 N004 {rout}
+R5 3 N004 10
+.ends ISL70444_FREQ
+
+.model NPN NPN
 .end
 """
-
+    netlist = sanitize_netlist(netlist)
     print("=== pyng smoketest ===")
     print(f"Platform: {platform.platform()}")
     print(f"Python:   {sys.version.split()[0]}")
@@ -177,7 +233,7 @@ R2 2 0 R = {unif(7k,0.01)}
     try:
         # sim_results = pyng.multirun_proto(netlist, 100)
         # number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes_per_run, signals = sim_results
-        number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes_per_run, x_label, signals = pyng.multirun_proto(netlist, 100)
+        number_of_runs, param_names, signal_names, run_indices, num_datapoints, param_values_per_run, x_axes_per_run, x_label, signals = pyng.multirun_proto(netlist, 1)
         run_indices = np.array(run_indices, dtype=np.uint64)
         num_datapoints = np.array(num_datapoints, dtype=np.uint64)
         param_values_per_run = np.array(param_values_per_run, dtype=np.float64)
