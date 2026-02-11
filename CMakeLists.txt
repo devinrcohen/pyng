@@ -1,5 +1,3 @@
-message(STATUS "=== PYNG CMakeLists LOADED: MARKER_ABC123 ===")
-include_directories(SYSTEM /usr/include)
 cmake_minimum_required(VERSION 3.22)
 project(pyng LANGUAGES C CXX)
 
@@ -17,10 +15,22 @@ find_package(pybind11 CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NGSPICE REQUIRED ngspice)
 
+message(STATUS "ngspice via pkg-config: version ${NGSPICE_VERSION}")
 message(STATUS "NGSPICE include dirs: ${NGSPICE_INCLUDE_DIRS}")
 message(STATUS "NGSPICE library dirs: ${NGSPICE_LIBRARY_DIRS}")
-message(STATUS "NGSPICE libraries:    ${NGSPICE_LIBRARIES}")
-message(STATUS "NGSPICE cflags:       ${NGSPICE_CFLAGS_OTHER}")
+message(STATUS "NGSPICE libs: ${NGSPICE_LIBRARIES}")
+
+# Resolve the actual library file (preferred) so we don't rely on link search paths.
+find_library(NGSPICE_LIBRARY_FILE
+        NAMES ngspice libngspice
+        HINTS ${NGSPICE_LIBRARY_DIRS}
+        PATHS /usr/lib64 /usr/lib /lib64 /lib /usr/local/lib
+)
+if(NOT NGSPICE_LIBRARY_FILE)
+    message(FATAL_ERROR "Could not resolve libngspice via find_library(). "
+            "pkg-config said libs='${NGSPICE_LIBRARIES}' dirs='${NGSPICE_LIBRARY_DIRS}'")
+endif()
+message(STATUS "NGSPICE library file: ${NGSPICE_LIBRARY_FILE}")
 
 # ---- Core C++ library ------------------------------------------------------
 add_library(pyng_core STATIC
@@ -28,44 +38,30 @@ add_library(pyng_core STATIC
         montecarlo.cpp
 )
 
-# This is the key: explicitly add include dirs from pkg-config
 target_include_directories(pyng_core
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
-        PRIVATE
+        # Still add include dirs normally (useful for IDEs)
         ${NGSPICE_INCLUDE_DIRS}
 )
 
-# Also explicitly add library search dirs + libs from pkg-config
-if(NGSPICE_LIBRARY_DIRS)
-    target_link_directories(pyng_core PRIVATE ${NGSPICE_LIBRARY_DIRS})
-endif()
+# Force include dirs even if CMake thinks they're "implicit".
+# This is the key fix for conda toolchain compilers that don't search /usr/include.
+foreach(_inc IN LISTS NGSPICE_INCLUDE_DIRS)
+    target_compile_options(pyng_core PRIVATE "-I${_inc}")
+endforeach()
 
-target_link_libraries(pyng_core PRIVATE ${NGSPICE_LIBRARIES})
+target_link_libraries(pyng_core
+        PUBLIC
+        ${NGSPICE_LIBRARY_FILE}
+)
 
-# Some pkg-config packages require extra flags (rare here, but correct)
-if(NGSPICE_CFLAGS_OTHER)
-    target_compile_options(pyng_core PRIVATE ${NGSPICE_CFLAGS_OTHER})
-endif()
-
-# ---- Python extension module (import name: pyng) ---------------------------
+# ---- Python extension module (pyng) ---------------------------------------
 pybind11_add_module(pyng MODULE
         python_external.cpp
 )
 
 target_link_libraries(pyng PRIVATE pyng_core)
-
-# The Python module may also need ngspice on the link line depending on how
-# your core library is built/linked on the platform
-if(NGSPICE_LIBRARY_DIRS)
-    target_link_directories(pyng PRIVATE ${NGSPICE_LIBRARY_DIRS})
-endif()
-target_link_libraries(pyng PRIVATE ${NGSPICE_LIBRARIES})
-
-target_include_directories(pyng PRIVATE ${NGSPICE_INCLUDE_DIRS})
-if(NGSPICE_CFLAGS_OTHER)
-    target_compile_options(pyng PRIVATE ${NGSPICE_CFLAGS_OTHER})
-endif()
 
 # ---- Optional CLI ----------------------------------------------------------
 if(PYNG_BUILD_CLI)
