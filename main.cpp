@@ -13,8 +13,11 @@ static void testbed(const std::string&);
 static void margins_testbed(const std::string&);
 void multirun_op(const std::string&, const int&);
 
+using namespace ngpp;
+
 int main(int argc, char* argv[]) {
-    ngpp::initNgspice();
+    SpiceEngine engine;
+    engine.initNgspice();
     std::cout << "Hola World!" << std::endl;
     //SpiceEngine engine;
     const std::string netlist =
