@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <tuple>
 #include <complex>
 #include <cstring> // strlen, possibly strdup
 #include <mutex>
@@ -67,6 +68,12 @@ namespace ngpp {
         std::vector<double> gain_margins;
     };
 
+    struct CircuitParam {
+        // facilitates syntax let r1 = @r1[r], let c1 = @c1[c], etc
+        std::string paramName; // r1, c1, l1, vs, ...
+        std::string paramQuantity; // r, c, l, v, ...
+    };
+
     static std::atomic<bool> g_initialized{false};
     static std::atomic<bool> g_hasLoadedCircuit{false};
 
@@ -101,8 +108,9 @@ namespace ngpp {
         int                                 loadNetlist(const std::string&);
         int                                 runCommand(const char*);
         void                                say_hello();
-        SimPackage                          multirunProto(const std::string&, const int&);
-        SimPackage                          multirunProto2(const std::string&, const int&);
+        SimPackage                          multirun(std::string, std::vector<std::string>, std::string, std::vector<std::pair<std::string, std::string>>, std::string, size_t);
+        SimPackage                          multirunProto(const std::string&, size_t);
+        SimPackage                          multirunProto2(const std::string&, size_t);
         static void                         appendOutput(const char* s, callback cb);
         static void                         setBgRunning(bool running);
         static void waitBgDone();

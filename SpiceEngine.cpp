@@ -1,11 +1,12 @@
 #include "SpiceEngine.hpp"
+
+#include <algorithm>
 #include <iostream>
 #include <mutex>
 #include <atomic>
 #include <sstream>
 #include <cmath>
 #include <condition_variable>
-#include <map>
 
 extern "C" {
 #include <ngspice/sharedspice.h>
@@ -660,7 +661,7 @@ namespace ngpp {
         if (path && *path) setenv("SPICE_SCRIPTS", path, 1);
     }
 
-    SimPackage SpiceEngine::multirunProto(const std::string& netlist, const int& runs) {
+    SimPackage SpiceEngine::multirunProto(const std::string& netlist, size_t runs) {
         SimPackage package;
         package.number_of_runs = runs;
         package.results.reserve(runs);
@@ -669,7 +670,7 @@ namespace ngpp {
         package.param_names.emplace_back("__r1");
         package.param_names.emplace_back("__r2");
         package.x_label = "frequency";
-        for (int k = 1; k <= runs; ++k) { // index starts at 1
+        for (size_t k = 1; k <= runs; ++k) { // index starts at 1
             RunResult result;
             loadNetlist(netlist); // re-load circuit (fresh eval)
             runCommand("reset");
@@ -713,7 +714,7 @@ namespace ngpp {
         return package;
     }
 
-    SimPackage SpiceEngine::multirunProto2(const std::string& netlist, const int& runs) {
+    SimPackage SpiceEngine::multirunProto2(const std::string& netlist, size_t runs) {
         SimPackage package;
         package.number_of_runs = runs;
         package.results.reserve(runs);
@@ -724,7 +725,7 @@ namespace ngpp {
         package.param_names.emplace_back("__r4");
         package.param_names.emplace_back("__r6");
         package.x_label = "frequency";
-        for (int k = 1; k <= runs; ++k) { // index starts at 1
+        for (size_t k = 1; k <= runs; ++k) { // index starts at 1
             RunResult result;
             loadNetlist(netlist); // re-load circuit (fresh eval)
             runCommand("reset");
@@ -771,6 +772,62 @@ namespace ngpp {
             result.x_axis = frequency;
             package.results.emplace_back(result);
         }
+        return package;
+    }
+
+    SimPackage SpiceEngine::multirun(std::string netlist,
+                        std::vector<std::string> signalNames,
+                        std::string command,
+                        std::vector<std::pair<std::string, std::string>> circuitParams,
+                        std::string xAxisName,
+                        size_t runs) {
+        SimPackage package;
+        package.number_of_runs = runs;
+        package.results.reserve(runs);
+        package.param_names.reserve(circuitParams.size());
+        //====
+        for (size_t k = 1; k <= runs; ++k) {
+            RunResult result;
+            loadNetlist(netlist); // re-load circuit (fresh eval)
+            runCommand("reset");
+            runCommand(command.c_str());
+            result.param_values.clear();
+            result.param_values.reserve(circuitParams.size());
+            // loop through parameters
+            for (auto p : circuitParams) {
+                std::for_each(p.first.begin(), p.first.end(), [](char& c) {
+                    c = std::tolower(c);
+                });
+                std::for_each(p.second.begin(), p.second.end(), [](char& c) {
+                    c = std::tolower(c);
+                });
+                std::string definition = "let " + p.first + " = @" + p.first + "[" + p.second +"]";
+                // std::cout << "definition: " << definition << std::endl;
+                runCommand(definition.c_str());
+                auto scalar_or_zero = [](const cvector& v) -> cdouble {
+                    return v.empty() ? std::complex<double>(0.0, 0.0) : v[0];
+                };
+                // auto Q = scalar_or_zero(getVector(p.first.c_str()));
+                // std::cout << "q: " << Q.real() << std::endl;
+                result.param_values.emplace_back(scalar_or_zero(getVector(p.first.c_str())));
+            }
+            result.signal_vectors.clear();
+            result.signal_vectors.reserve(signalNames.size());
+
+            // loop through signals
+            for (const auto& s : signalNames) {
+                result.signal_vectors.emplace_back(getVector(s.c_str()));
+            }
+            result.this_run = k; /*******/
+            result.x_axis = getVector(xAxisName.c_str());
+            package.results.emplace_back(result);
+        }
+
+        for (const auto& p : circuitParams)
+            package.param_names.emplace_back(p.first);
+        package.signal_names = std::move(signalNames);
+        package.x_label = std::move(xAxisName);
+
         return package;
     }
 }
